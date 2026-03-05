@@ -42,6 +42,13 @@ const I18N = {
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
+    annotator_modal_title: "先填写标注员ID",
+    annotator_modal_desc: "未检测到有效的标注员ID。建议现在填写；关闭后将继续使用默认值 {default_id}。",
+    annotator_modal_submit: "提交",
+    annotator_modal_close: "关闭",
+    annotator_modal_input_placeholder: "请输入你的标注员ID",
+    annotator_modal_err_empty: "请输入非空标注员ID，或点击右上角关闭继续使用默认值。",
+    toast_annotator_saved: "已设置标注员ID：{id}",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "EN",
@@ -89,6 +96,13 @@ const I18N = {
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
+    annotator_modal_title: "Set Annotator ID First",
+    annotator_modal_desc: "No valid annotator ID was detected. Please fill it now, or close to continue with default value {default_id}.",
+    annotator_modal_submit: "Submit",
+    annotator_modal_close: "Close",
+    annotator_modal_input_placeholder: "Enter annotator ID",
+    annotator_modal_err_empty: "Please enter a non-empty annotator ID, or close to continue with default.",
+    toast_annotator_saved: "Annotator ID set: {id}",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "中",
@@ -102,6 +116,8 @@ const SLOT_META = {
 
 const HANDLE_SIZE = 8;
 const MIN_BOX_SIZE = 2;
+const DEFAULT_ANNOTATOR_ID = "annotator_demo";
+const ANNOTATOR_STORAGE_KEY = "ui_review_annotator_id";
 
 const state = {
   frame: null,
@@ -119,6 +135,7 @@ const state = {
   lang: "zh",
   hintKey: "hint_start",
   hintVars: {},
+  initialFrameRequested: false,
 };
 
 const refs = {
@@ -149,6 +166,11 @@ const refs = {
   p2Y: document.getElementById("p2Y"),
   p2W: document.getElementById("p2W"),
   p2H: document.getElementById("p2H"),
+  annotatorModal: document.getElementById("annotatorModal"),
+  annotatorModalCloseBtn: document.getElementById("annotatorModalCloseBtn"),
+  annotatorModalInput: document.getElementById("annotatorModalInput"),
+  annotatorModalSubmitBtn: document.getElementById("annotatorModalSubmitBtn"),
+  annotatorModalHint: document.getElementById("annotatorModalHint"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -174,6 +196,13 @@ function applyLanguage() {
   });
 
   refs.langToggleBtn.textContent = t("lang_toggle");
+  refs.annotatorModalCloseBtn.title = t("annotator_modal_close");
+  refs.annotatorModalCloseBtn.setAttribute("aria-label", t("annotator_modal_close"));
+  refs.annotatorModalInput.placeholder = t("annotator_modal_input_placeholder");
+  const desc = document.getElementById("annotatorModalDesc");
+  if (desc) {
+    desc.textContent = t("annotator_modal_desc", { default_id: DEFAULT_ANNOTATOR_ID });
+  }
   syncSlotUI("p1");
   syncSlotUI("p2");
   renderAiButtons();
@@ -189,6 +218,53 @@ function toggleLanguage() {
 function annotatorId() {
   const value = refs.annotatorId.value.trim();
   return value || "annotator_unknown";
+}
+
+function getStoredAnnotatorId() {
+  return (localStorage.getItem(ANNOTATOR_STORAGE_KEY) || "").trim();
+}
+
+function shouldPromptAnnotatorModal(storedAnnotatorId) {
+  return !storedAnnotatorId || storedAnnotatorId === DEFAULT_ANNOTATOR_ID;
+}
+
+function requestInitialFrameOnce() {
+  if (state.initialFrameRequested) {
+    return;
+  }
+  state.initialFrameRequested = true;
+  requestNextFrame();
+}
+
+function closeAnnotatorModalAndContinue() {
+  refs.annotatorModal.hidden = true;
+  refs.annotatorModalHint.textContent = "";
+  requestInitialFrameOnce();
+}
+
+function submitAnnotatorModal() {
+  const value = refs.annotatorModalInput.value.trim();
+  if (!value) {
+    refs.annotatorModalHint.textContent = t("annotator_modal_err_empty");
+    refs.annotatorModalInput.focus();
+    return;
+  }
+  refs.annotatorId.value = value;
+  localStorage.setItem(ANNOTATOR_STORAGE_KEY, value);
+  closeAnnotatorModalAndContinue();
+  showToastKey("toast_annotator_saved", { id: value });
+}
+
+function maybePromptAnnotatorModal() {
+  const storedId = getStoredAnnotatorId();
+  if (!shouldPromptAnnotatorModal(storedId)) {
+    return false;
+  }
+  refs.annotatorModal.hidden = false;
+  refs.annotatorModalHint.textContent = "";
+  refs.annotatorModalInput.value = "";
+  setTimeout(() => refs.annotatorModalInput.focus(), 0);
+  return true;
 }
 
 function slotName(slot) {
@@ -816,9 +892,9 @@ async function submitAndNext() {
 }
 
 function initEvents() {
-  refs.annotatorId.value = localStorage.getItem("ui_review_annotator_id") || "annotator_demo";
+  refs.annotatorId.value = getStoredAnnotatorId() || DEFAULT_ANNOTATOR_ID;
   refs.annotatorId.addEventListener("change", () => {
-    localStorage.setItem("ui_review_annotator_id", annotatorId());
+    localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
   });
 
   refs.langToggleBtn.addEventListener("click", toggleLanguage);
@@ -837,6 +913,18 @@ function initEvents() {
   refs.canvas.addEventListener("mousemove", onCanvasMove);
   refs.canvas.addEventListener("mouseup", onCanvasUp);
   refs.canvas.addEventListener("mouseleave", onCanvasUp);
+
+  refs.annotatorModalCloseBtn.addEventListener("click", closeAnnotatorModalAndContinue);
+  refs.annotatorModalSubmitBtn.addEventListener("click", submitAnnotatorModal);
+  refs.annotatorModalInput.addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      submitAnnotatorModal();
+    } else if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeAnnotatorModalAndContinue();
+    }
+  });
 }
 
 function init() {
@@ -851,7 +939,10 @@ function init() {
   syncSlotUI("p2");
   setHintByKey("hint_start");
   applyLanguage();
-  requestNextFrame();
+  const prompted = maybePromptAnnotatorModal();
+  if (!prompted) {
+    requestInitialFrameOnce();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", init);

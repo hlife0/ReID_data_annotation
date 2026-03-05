@@ -100,6 +100,34 @@
       </main>
     </div>
 
+    <div id="annotatorModal" class="modal-backdrop" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="annotatorModalTitle">
+        <button
+          id="annotatorModalCloseBtn"
+          type="button"
+          class="modal-close"
+          aria-label="Close"
+          title="Close"
+        >
+          ×
+        </button>
+        <h2 id="annotatorModalTitle" data-i18n="annotator_modal_title">先填写标注员ID</h2>
+        <p id="annotatorModalDesc" data-i18n="annotator_modal_desc">
+          未检测到有效的标注员ID。建议现在填写；关闭后将继续使用默认值 annotator_demo。
+        </p>
+        <label class="modal-field">
+          <span id="annotatorModalInputLabel" data-i18n="annotator_id">标注员ID</span>
+          <input id="annotatorModalInput" type="text" autocomplete="off" />
+        </label>
+        <div id="annotatorModalHint" class="modal-hint"></div>
+        <div class="modal-actions">
+          <button id="annotatorModalSubmitBtn" type="button" class="btn" data-i18n="annotator_modal_submit">
+            提交
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
     <script src="/app.js" defer></script>
   </body>
