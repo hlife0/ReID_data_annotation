@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>双人框标注复核</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="header">
+        <div class="header-title-block">
+          <h1 id="pageTitle" data-i18n="page_title">双人框标注复核</h1>
+          <p id="pageSubtitle" data-i18n="page_subtitle">P1(绿衣服) 与 P2(灰衣服) 双人标注流程。</p>
+        </div>
+        <div class="header-meta">
+          <label>
+            <span id="annotatorLabel" data-i18n="annotator_id">标注员ID</span>
+            <input id="annotatorId" type="text" value="annotator_demo" />
+          </label>
+          <button id="nextFrameBtn" class="btn subtle" data-i18n="skip_frame">跳过当前帧</button>
+          <button id="submitBtn" class="btn" data-i18n="submit_next">提交并下一帧</button>
+          <button id="langToggleBtn" class="btn subtle">EN</button>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <div><span id="labelVideo" class="label" data-i18n="video">视频</span> <span id="videoStem">-</span></div>
+        <div><span id="labelFrame" class="label" data-i18n="frame">帧号</span> <span id="frameIndex">-</span></div>
+        <div><span id="labelTs" class="label" data-i18n="timestamp_ms">时间戳(ms)</span> <span id="timestampMs">-</span></div>
+        <div><span id="labelCount" class="label" data-i18n="annotation_count">标注次数</span> <span id="annoCount">-</span></div>
+      </section>
+
+      <main class="main-grid">
+        <section class="canvas-panel">
+          <div class="canvas-head">
+            <div class="legend">
+              <span id="chipAi" class="chip chip-ai" data-i18n="chip_ai">AI框（虚线 + track_id）</span>
+              <span id="chipP1" class="chip chip-p1" data-i18n="chip_p1">P1 用户框</span>
+              <span id="chipP2" class="chip chip-p2" data-i18n="chip_p2">P2 用户框</span>
+            </div>
+            <div id="canvasHint" class="canvas-hint">准备就绪</div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="frameCanvas"></canvas>
+          </div>
+        </section>
+
+        <section class="control-panel">
+          <article class="person-card p1">
+            <h2 id="p1Title" data-i18n="p1_title">P1（绿衣服）</h2>
+            <div class="row">
+              <label id="p1SourceLabel" data-i18n="source">来源</label>
+              <div id="p1Source" class="source-badge">not_set</div>
+            </div>
+            <div class="row">
+              <label id="p1AiLabel" data-i18n="apply_ai_box">应用AI框</label>
+              <div id="p1AiButtons" class="ai-buttons"></div>
+            </div>
+            <div class="row">
+              <label id="p1ManualLabel" data-i18n="manual_draw">手动画框</label>
+              <div class="row-actions">
+                <button id="p1DrawBtn" class="btn" data-i18n="draw_new_box">绘制新框</button>
+                <button id="p1AbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
+              </div>
+            </div>
+            <div class="grid4">
+              <label>X <input id="p1X" type="number" step="0.1" /></label>
+              <label>Y <input id="p1Y" type="number" step="0.1" /></label>
+              <label>W <input id="p1W" type="number" step="0.1" /></label>
+              <label>H <input id="p1H" type="number" step="0.1" /></label>
+            </div>
+          </article>
+
+          <article class="person-card p2">
+            <h2 id="p2Title" data-i18n="p2_title">P2（灰衣服）</h2>
+            <div class="row">
+              <label id="p2SourceLabel" data-i18n="source">来源</label>
+              <div id="p2Source" class="source-badge">not_set</div>
+            </div>
+            <div class="row">
+              <label id="p2AiLabel" data-i18n="apply_ai_box">应用AI框</label>
+              <div id="p2AiButtons" class="ai-buttons"></div>
+            </div>
+            <div class="row">
+              <label id="p2ManualLabel" data-i18n="manual_draw">手动画框</label>
+              <div class="row-actions">
+                <button id="p2DrawBtn" class="btn" data-i18n="draw_new_box">绘制新框</button>
+                <button id="p2AbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
+              </div>
+            </div>
+            <div class="grid4">
+              <label>X <input id="p2X" type="number" step="0.1" /></label>
+              <label>Y <input id="p2Y" type="number" step="0.1" /></label>
+              <label>W <input id="p2W" type="number" step="0.1" /></label>
+              <label>H <input id="p2H" type="number" step="0.1" /></label>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

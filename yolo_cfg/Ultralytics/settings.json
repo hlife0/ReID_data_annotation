@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "/home/hrli/data_annotation/datasets",
+  "weights_dir": "weights",
+  "runs_dir": "runs",
+  "uuid": "8c9b978d3f35b0ce3f7b79787e1d82402ac8a0bb6e87233c85020d732d5e1c28",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

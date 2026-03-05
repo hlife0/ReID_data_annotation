@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UI 标注后台面板</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle" data-i18n="page_title">UI 标注后台面板</h1>
+          <p id="pageSubtitle" data-i18n="page_subtitle">端口 10087：Annotator统计、逐帧明细、整体进度分布</p>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="btn" data-i18n="refresh">刷新数据</button>
+          <button id="langToggleBtn" class="btn">EN</button>
+        </div>
+      </header>
+
+      <section class="metric-grid">
+        <div class="metric-card">
+          <div id="mLabelTotalFrames" class="metric-label" data-i18n="metric_total_frames">总帧数</div>
+          <div id="mTotalFrames" class="metric-value">-</div>
+        </div>
+        <div class="metric-card">
+          <div id="mLabelAnnotatedFrames" class="metric-label" data-i18n="metric_annotated_frames">已被标注帧数</div>
+          <div id="mAnnotatedFrames" class="metric-value">-</div>
+        </div>
+        <div class="metric-card">
+          <div id="mLabelTotalAnnotations" class="metric-label" data-i18n="metric_total_annotations">总提交数</div>
+          <div id="mTotalAnnotations" class="metric-value">-</div>
+        </div>
+        <div class="metric-card">
+          <div id="mLabelAnnotators" class="metric-label" data-i18n="metric_annotator_count">Annotator数量</div>
+          <div id="mAnnotatorCount" class="metric-value">-</div>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <h2 id="chart1Title" data-i18n="chart1_title">Overall 统计图 1：帧被标注次数分布</h2>
+          <p id="chart1Hint" class="hint" data-i18n="chart1_hint">展示被标注过 1、2、3、4+ 次的帧数量</p>
+          <div id="frameDistChart" class="bar-chart"></div>
+        </article>
+
+        <article class="panel">
+          <h2 id="chart2Title" data-i18n="chart2_title">Overall 统计图 2：每个 Annotator 标注数量</h2>
+          <p id="chart2Hint" class="hint" data-i18n="chart2_hint">按提交标注数降序</p>
+          <div id="annotatorChart" class="bar-chart"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2 id="annotatorSectionTitle" data-i18n="annotator_overview_title">Annotator 总览</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="thAnnotator" data-i18n="th_annotator">Annotator</th>
+                <th id="thAnnotationCount" data-i18n="th_annotation_count">标注数</th>
+                <th id="thAssignmentCount" data-i18n="th_assignment_count">分配数</th>
+                <th id="thVideosCovered" data-i18n="th_videos_covered">覆盖视频数</th>
+                <th id="thLatestSubmitted" data-i18n="th_latest_submitted">最近提交时间</th>
+              </tr>
+            </thead>
+            <tbody id="annotatorBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 id="recentSectionTitle" data-i18n="recent_annotations_title">最近标注记录（谁标注了哪些帧）</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="thRecentAnnotationId" data-i18n="th_annotation_id">annotation_id</th>
+                <th id="thRecentAnnotator" data-i18n="th_annotator_lower">annotator</th>
+                <th id="thRecentVideo" data-i18n="th_video">video</th>
+                <th id="thRecentFrame" data-i18n="th_frame">frame</th>
+                <th id="thRecentSubmittedAt" data-i18n="th_submitted_at">submitted_at</th>
+                <th id="thRecentP1Source" data-i18n="th_p1_source">P1 source</th>
+                <th id="thRecentP2Source" data-i18n="th_p2_source">P2 source</th>
+              </tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 id="frameQueryTitle" data-i18n="frame_query_title">指定视频 + 指定帧 查询</h2>
+        <div class="query-row">
+          <label>
+            <span id="videoSelectLabel" data-i18n="video">Video</span>
+            <select id="videoStemSelect"></select>
+          </label>
+          <label>
+            <span id="frameIndexLabel" data-i18n="frame_index">Frame Index</span>
+            <input id="frameIndexInput" type="number" min="1" value="1" />
+          </label>
+          <button id="queryFrameBtn" class="btn" data-i18n="query_frame_detail">查询帧明细</button>
+        </div>
+        <div id="frameSummary" class="frame-summary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="thFrameAnnotationId" data-i18n="th_annotation_id">annotation_id</th>
+                <th id="thFrameAnnotator" data-i18n="th_annotator_lower">annotator</th>
+                <th id="thFrameSubmittedAt" data-i18n="th_submitted_at">submitted_at</th>
+                <th id="thFrameP1" data-i18n="th_p1">P1</th>
+                <th id="thFrameP2" data-i18n="th_p2">P2</th>
+              </tr>
+            </thead>
+            <tbody id="frameDetailBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

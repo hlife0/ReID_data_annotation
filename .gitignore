@@ -1,0 +1,18 @@
+# Python cache / env
+__pycache__/
+*.pyc
+.venv/
+
+# Large data and generated artifacts
+data
+batch_*/
+*.pt
+
+# Runtime/config secrets
+ngrok.yml
+
+# Local tools binaries
+tools/
+
+# Misc
+*.log
