@@ -19,7 +19,9 @@
 当前脚本：
 
 - `process_prelabel_batch.py`
+- `process_imu_mapping_batch.py`
 - `test_render_pseudo_labels_video.py`
+- `test_imu_mapping_outputs.py`
 - `ui_review_server.py`
 - `ui_admin_server.py`
 
@@ -31,7 +33,9 @@
 .
 ├── data -> /data/hrli/data_annotation/data
 ├── process_prelabel_batch.py
+├── process_imu_mapping_batch.py
 ├── test_render_pseudo_labels_video.py
+├── test_imu_mapping_outputs.py
 ├── ui_review_server.py
 ├── ui_admin_server.py
 ├── ui_review_web/
@@ -129,6 +133,40 @@ cd /home/hrli/data_annotation
 - 按 `m_t` 降序输出候选帧，优先回放最容易判断人物-IMU 对应的时刻
 
 详细规范见：`REQUIREMENTS_IMU_MAPPING.md`
+
+### 6.1 运行示例
+
+```bash
+cd /home/hrli/data_annotation
+.venv/bin/python ./process_imu_mapping_batch.py \
+  --required-root ./data/required \
+  --output-root . \
+  --coef-type motion \
+  --smoothing-window 5 \
+  --max-align-gap-ms 250
+```
+
+指定已有批次目录输出：
+
+```bash
+.venv/bin/python ./process_imu_mapping_batch.py \
+  --required-root ./data/required \
+  --batch-dir ./batch_20260305_v03
+```
+
+输出文件：
+
+- `batch_xxx/imu_mapping/<video_stem>.imu_ratio_rank.csv`
+- `batch_xxx/imu_mapping/<video_stem>.imu_mapping_summary.json`
+- `batch_xxx/logs/run.log`
+- `batch_xxx/logs/errors.log`
+
+### 6.2 C 阶段产物校验
+
+```bash
+cd /home/hrli/data_annotation
+.venv/bin/python ./test_imu_mapping_outputs.py --batch-dir ./batch_20260305_v03
+```
 
 ---
 
