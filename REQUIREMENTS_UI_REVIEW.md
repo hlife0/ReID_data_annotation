@@ -112,6 +112,16 @@
 
 ---
 
+## 6.6 标注历史与修订（新增）
+
+为支持标注员自查与纠错，UI 提供左侧历史栏：
+
+1. 仅展示当前 `annotator_id` 的提交记录，按 `submitted_at` 从近到远排序。
+2. 点击条目进入编辑模式，加载对应帧与历史框。
+3. 编辑后保存更新原记录，不改变数据库结构与计数逻辑。
+
+---
+
 ## 7. 后端分发与持久化规范（实现）
 
 ### 7.1 分帧策略
@@ -155,6 +165,17 @@
 1. `/api/next_frame` 的 `frame` 会额外返回 `recommendations` 字段（详见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`）。
 2. UI 在用户未操作前，可自动应用推荐的 `track_id` 到 P1/P2。
 3. 统计表 `track_person_stats` 由提交时更新维护。
+
+### 7.5 标注修订 API（新增）
+
+新增接口：
+
+1. `GET /api/my_annotations?annotator_id=...`  
+   返回该标注员的历史记录（按提交时间倒序）。
+2. `GET /api/annotation_detail?annotator_id=...&annotation_id=...`  
+   返回标注记录与对应帧信息，用于进入编辑模式。
+3. `POST /api/update_annotation`  
+   更新已存在的 annotation 记录（仅允许同一 `annotator_id` 修改）。
 
 ---
 

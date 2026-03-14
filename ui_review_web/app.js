@@ -51,6 +51,14 @@ const I18N = {
     annotator_modal_input_placeholder: "请输入你的标注员ID",
     annotator_modal_err_empty: "请输入非空标注员ID，或点击右上角关闭继续使用默认值。",
     toast_annotator_saved: "已设置标注员ID：{id}",
+    history_title: "我的标注记录",
+    history_hint: "点击条目进入编辑模式",
+    history_refresh: "刷新",
+    history_exit_edit: "退出编辑",
+    history_save_edit: "保存修改",
+    history_empty: "暂无记录",
+    toast_history_loaded: "已刷新标注记录",
+    toast_edit_saved: "修改已保存",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "EN",
@@ -107,6 +115,14 @@ const I18N = {
     annotator_modal_input_placeholder: "Enter annotator ID",
     annotator_modal_err_empty: "Please enter a non-empty annotator ID, or close to continue with default.",
     toast_annotator_saved: "Annotator ID set: {id}",
+    history_title: "My Annotations",
+    history_hint: "Click an item to edit",
+    history_refresh: "Refresh",
+    history_exit_edit: "Exit Edit",
+    history_save_edit: "Save Changes",
+    history_empty: "No records",
+    toast_history_loaded: "History refreshed",
+    toast_edit_saved: "Changes saved",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "中",
@@ -141,6 +157,10 @@ const state = {
   hintVars: {},
   initialFrameRequested: false,
   imageRequestId: 0,
+  history: [],
+  editing: false,
+  editingAnnotationId: "",
+  lastAssignmentFrame: null,
 };
 
 const refs = {
@@ -176,6 +196,10 @@ const refs = {
   annotatorModalInput: document.getElementById("annotatorModalInput"),
   annotatorModalSubmitBtn: document.getElementById("annotatorModalSubmitBtn"),
   annotatorModalHint: document.getElementById("annotatorModalHint"),
+  historyList: document.getElementById("historyList"),
+  refreshHistoryBtn: document.getElementById("refreshHistoryBtn"),
+  saveEditBtn: document.getElementById("saveEditBtn"),
+  exitEditBtn: document.getElementById("exitEditBtn"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -421,7 +445,7 @@ function resetSlots() {
   syncSlotUI("p2");
 }
 
-function applyFrame(frame) {
+function applyFrame(frame, options = {}) {
   state.frame = frame;
   state.aiBoxes = Array.isArray(frame.ai_boxes) ? frame.ai_boxes : [];
   state.aiByTrack = new Map();
@@ -436,9 +460,14 @@ function applyFrame(frame) {
   setHintByKey("hint_loading");
   renderAiButtons();
   resetSlots();
-  applyRecommendations(frame.recommendations);
+  if (!options.skipRecommendations) {
+    applyRecommendations(frame.recommendations);
+  }
   syncHeader();
   loadImage(frame.image_url);
+  if (options.isAssignment) {
+    state.lastAssignmentFrame = frame;
+  }
 }
 
 function renderAiButtons() {
@@ -900,7 +929,8 @@ async function requestNextFrame() {
   refs.nextFrameBtn.disabled = true;
   try {
     const payload = await postJson("/api/next_frame", { annotator_id: annotatorId() });
-    applyFrame(payload.frame);
+    exitEditMode();
+    applyFrame(payload.frame, { isAssignment: true });
     showToastKey("toast_loaded_next");
   } catch (err) {
     showToast(err.message, true);
@@ -925,7 +955,8 @@ async function submitAndNext() {
   try {
     const payload = buildSubmitPayload();
     const result = await postJson("/api/submit", payload);
-    applyFrame(result.next_frame);
+    exitEditMode();
+    applyFrame(result.next_frame, { isAssignment: true });
     showToastKey("toast_submitted", {
       video: result.submitted.video_stem,
       frame: result.submitted.frame_index,
@@ -938,10 +969,152 @@ async function submitAndNext() {
   }
 }
 
+async function getJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) {
+    throw new Error(payload.error || `Request failed (${res.status})`);
+  }
+  return payload;
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  return ts.replace("T", " ").slice(0, 19);
+}
+
+function renderHistory() {
+  const container = refs.historyList;
+  if (!container) return;
+  container.innerHTML = "";
+  if (!state.history || state.history.length === 0) {
+    const empty = document.createElement("div");
+    empty.textContent = t("history_empty");
+    empty.style.color = "#5f6e7a";
+    empty.style.fontSize = "0.84rem";
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const item of state.history) {
+    const btn = document.createElement("div");
+    btn.className = "history-item";
+    if (item.annotation_id === state.editingAnnotationId) {
+      btn.classList.add("active");
+    }
+    btn.innerHTML = `
+      <div class="time">${formatTime(item.submitted_at)}</div>
+      <div class="meta">${item.video_stem} #${item.frame_index}</div>
+    `;
+    btn.addEventListener("click", () => loadAnnotationDetail(item.annotation_id));
+    container.appendChild(btn);
+  }
+}
+
+async function loadHistory() {
+  try {
+    const payload = await getJson(`/api/my_annotations?annotator_id=${encodeURIComponent(annotatorId())}`);
+    state.history = payload.annotations || [];
+    renderHistory();
+    showToastKey("toast_history_loaded");
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+function setSlotFromRecord(slot, record) {
+  const source = record[`${slot}_source`];
+  const trackId = record[`${slot}_ai_track_id`] || "";
+  const w = Number(record[`${slot}_bbox_w`]);
+  const h = Number(record[`${slot}_bbox_h`]);
+  if (source === "absent" || !w || !h) {
+    setSlotBbox(slot, null, "absent", "");
+    return;
+  }
+  const bbox = {
+    x: Number(record[`${slot}_bbox_x`]),
+    y: Number(record[`${slot}_bbox_y`]),
+    w,
+    h,
+  };
+  setSlotBbox(slot, bbox, source, String(trackId));
+}
+
+async function loadAnnotationDetail(annotationId) {
+  try {
+    const payload = await getJson(
+      `/api/annotation_detail?annotation_id=${encodeURIComponent(annotationId)}&annotator_id=${encodeURIComponent(annotatorId())}`
+    );
+    enterEditMode(annotationId);
+    applyFrame(payload.frame, { skipRecommendations: true, isAssignment: false });
+    setSlotFromRecord("p1", payload.annotation);
+    setSlotFromRecord("p2", payload.annotation);
+    syncHeader();
+    renderHistory();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+function enterEditMode(annotationId) {
+  state.editing = true;
+  state.editingAnnotationId = annotationId;
+  refs.saveEditBtn.hidden = false;
+  refs.exitEditBtn.hidden = false;
+  refs.submitBtn.disabled = true;
+  refs.nextFrameBtn.disabled = true;
+}
+
+function exitEditMode() {
+  if (!state.editing) {
+    return;
+  }
+  state.editing = false;
+  state.editingAnnotationId = "";
+  refs.saveEditBtn.hidden = true;
+  refs.exitEditBtn.hidden = true;
+  refs.submitBtn.disabled = false;
+  refs.nextFrameBtn.disabled = false;
+  if (state.lastAssignmentFrame) {
+    applyFrame(state.lastAssignmentFrame, { skipRecommendations: false, isAssignment: true });
+  }
+}
+
+async function saveEdit() {
+  if (!state.editing || !state.frame) {
+    return;
+  }
+  try {
+    validateSubmission();
+  } catch (err) {
+    showToast(err.message, true);
+    return;
+  }
+  refs.saveEditBtn.disabled = true;
+  try {
+    const payload = {
+      annotation_id: state.editingAnnotationId,
+      annotator_id: annotatorId(),
+      video_stem: state.frame.video_stem,
+      frame_index: state.frame.frame_index,
+      timestamp_ms: state.frame.timestamp_ms,
+      p1: personSubmitPayload("p1"),
+      p2: personSubmitPayload("p2"),
+    };
+    await postJson("/api/update_annotation", payload);
+    await loadHistory();
+    showToastKey("toast_edit_saved");
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    refs.saveEditBtn.disabled = false;
+  }
+}
 function initEvents() {
   refs.annotatorId.value = getStoredAnnotatorId() || DEFAULT_ANNOTATOR_ID;
   refs.annotatorId.addEventListener("change", () => {
     localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
+    loadHistory();
   });
 
   refs.langToggleBtn.addEventListener("click", toggleLanguage);
@@ -952,6 +1125,10 @@ function initEvents() {
   refs.p2DrawBtn.addEventListener("click", () => startDraw("p2"));
   refs.p1AbsentBtn.addEventListener("click", () => markSlotAbsent("p1"));
   refs.p2AbsentBtn.addEventListener("click", () => markSlotAbsent("p2"));
+
+  refs.refreshHistoryBtn.addEventListener("click", loadHistory);
+  refs.saveEditBtn.addEventListener("click", saveEdit);
+  refs.exitEditBtn.addEventListener("click", exitEditMode);
 
   bindNumericInputs("p1");
   bindNumericInputs("p2");
@@ -990,6 +1167,9 @@ function init() {
   if (!prompted) {
     requestInitialFrameOnce();
   }
+  refs.saveEditBtn.hidden = true;
+  refs.exitEditBtn.hidden = true;
+  loadHistory();
 }
 
 window.addEventListener("DOMContentLoaded", init);

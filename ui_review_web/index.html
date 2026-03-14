@@ -32,6 +32,21 @@
       </section>
 
       <main class="main-grid">
+        <aside class="history-panel">
+          <div class="history-head">
+            <h2 id="historyTitle" data-i18n="history_title">我的标注记录</h2>
+            <button id="refreshHistoryBtn" class="btn subtle" data-i18n="history_refresh">刷新</button>
+          </div>
+          <p id="historyHint" class="history-hint" data-i18n="history_hint">
+            点击条目进入编辑模式
+          </p>
+          <div id="historyList" class="history-list"></div>
+          <div class="history-actions">
+            <button id="exitEditBtn" class="btn subtle" data-i18n="history_exit_edit">退出编辑</button>
+            <button id="saveEditBtn" class="btn" data-i18n="history_save_edit">保存修改</button>
+          </div>
+        </aside>
+
         <section class="canvas-panel">
           <div class="canvas-head">
             <div class="legend">

@@ -132,8 +132,88 @@ select {
 .main-grid {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 0.9fr 1.4fr 1fr;
   gap: 12px;
+}
+
+.history-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 560px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.history-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.history-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  overflow: auto;
+  max-height: 420px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
+.history-item {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.history-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.history-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.15);
+}
+
+.history-item .time {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.history-item .meta {
+  font-weight: 600;
+}
+
+.history-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.history-actions .btn {
+  width: 100%;
 }
 
 .canvas-panel {

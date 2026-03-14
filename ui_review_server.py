@@ -399,6 +399,58 @@ class AnnotationState:
         )
         return exported
 
+    def export_reviewed_csv_for_stem(self, stem: str) -> int:
+        if stem not in TARGET_VIDEO_STEMS:
+            raise ValueError(f"invalid video_stem: {stem}")
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    annotation_id,
+                    video_stem,
+                    frame_index,
+                    timestamp_ms,
+                    annotator_id,
+                    submitted_at,
+                    p1_bbox_x,
+                    p1_bbox_y,
+                    p1_bbox_w,
+                    p1_bbox_h,
+                    p1_source,
+                    p1_ai_track_id,
+                    p2_bbox_x,
+                    p2_bbox_y,
+                    p2_bbox_w,
+                    p2_bbox_h,
+                    p2_source,
+                    p2_ai_track_id
+                FROM annotations
+                WHERE video_stem=?
+                ORDER BY submitted_at ASC, annotation_id ASC
+                """,
+                (stem,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        reviewed_csv = self.reviewed_dir / f"{stem}.reviewed.csv"
+        jsonl_path = self.reviewed_raw_dir / f"{stem}.frame_records.jsonl"
+
+        with reviewed_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=REVIEWED_COLUMNS)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({k: row[k] for k in REVIEWED_COLUMNS})
+
+        with jsonl_path.open("w", encoding="utf-8") as f:
+            for row in rows:
+                data = {k: row[k] for k in REVIEWED_COLUMNS}
+                f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+        self.logger.info(f"export reviewed csv done stem={stem} count={len(rows)}")
+        return len(rows)
+
     def status_summary(self) -> Dict[str, Any]:
         with self._lock:
             conn = self._connect()
@@ -467,6 +519,187 @@ class AnnotationState:
         if self.frame_cache_dir is not None:
             self._write_disk_cache(video_stem, frame_index, image)
         return image
+
+    def list_annotations_for_annotator(self, annotator_id: str) -> List[Dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        annotation_id,
+                        video_stem,
+                        frame_index,
+                        timestamp_ms,
+                        submitted_at,
+                        p1_source,
+                        p1_ai_track_id,
+                        p2_source,
+                        p2_ai_track_id
+                    FROM annotations
+                    WHERE annotator_id=?
+                    ORDER BY submitted_at DESC, annotation_id DESC
+                    """,
+                    (annotator_id,),
+                ).fetchall()
+            finally:
+                conn.close()
+
+        return [
+            {
+                "annotation_id": str(r["annotation_id"]),
+                "video_stem": str(r["video_stem"]),
+                "frame_index": int(r["frame_index"]),
+                "timestamp_ms": float(r["timestamp_ms"]),
+                "submitted_at": str(r["submitted_at"]),
+                "p1_source": str(r["p1_source"]),
+                "p1_ai_track_id": str(r["p1_ai_track_id"] or ""),
+                "p2_source": str(r["p2_source"]),
+                "p2_ai_track_id": str(r["p2_ai_track_id"] or ""),
+            }
+            for r in rows
+        ]
+
+    def annotation_detail(self, annotator_id: str, annotation_id: str) -> Dict[str, Any]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM annotations WHERE annotation_id=? AND annotator_id=?",
+                    (annotation_id, annotator_id),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("annotation not found for annotator")
+
+                stem = str(row["video_stem"])
+                frame_index = int(row["frame_index"])
+                key = (stem, frame_index)
+                if key not in self.frame_lookup:
+                    raise ValueError("frame not found in frame pool")
+
+                count_row = conn.execute(
+                    """
+                    SELECT annotation_count
+                    FROM frame_counts
+                    WHERE video_stem=? AND frame_index=?
+                    """,
+                    (stem, frame_index),
+                ).fetchone()
+                count_before = int(count_row["annotation_count"]) if count_row else 0
+            finally:
+                conn.close()
+
+        if self.reader is None:
+            raise RuntimeError("state not initialized")
+        width, height = self.reader.get_dimensions(stem)
+        frame = {
+            "assignment_id": "",
+            "video_stem": stem,
+            "frame_index": frame_index,
+            "timestamp_ms": _safe_float(row["timestamp_ms"]),
+            "annotation_count": count_before,
+            "image_width": width,
+            "image_height": height,
+            "ai_boxes": self.ai_boxes.get(key, []),
+            "recommendations": [],
+            "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
+        }
+
+        annotation = {k: row[k] for k in REVIEWED_COLUMNS}
+        annotation["annotation_id"] = str(annotation["annotation_id"])
+        annotation["annotator_id"] = str(annotation["annotator_id"])
+        annotation["video_stem"] = str(annotation["video_stem"])
+        annotation["submitted_at"] = str(annotation["submitted_at"])
+        annotation["p1_ai_track_id"] = str(annotation["p1_ai_track_id"] or "")
+        annotation["p2_ai_track_id"] = str(annotation["p2_ai_track_id"] or "")
+        return {"frame": frame, "annotation": annotation}
+
+    def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        annotation_id = str(payload.get("annotation_id", "")).strip()
+        if not annotation_id:
+            raise ValueError("annotation_id is required")
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    "SELECT * FROM annotations WHERE annotation_id=?",
+                    (annotation_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("annotation not found")
+                if str(row["annotator_id"]) != annotator_id:
+                    raise ValueError("annotator_id does not match annotation")
+
+                stem = str(row["video_stem"])
+                frame_index = int(row["frame_index"])
+                timestamp_ms = float(row["timestamp_ms"])
+
+                # validate payload consistency
+                if str(payload.get("video_stem", "")).strip() != stem:
+                    raise ValueError("video_stem mismatch")
+                if int(payload.get("frame_index", 0)) != frame_index:
+                    raise ValueError("frame_index mismatch")
+                if abs(float(payload.get("timestamp_ms", 0.0)) - timestamp_ms) > 1.0:
+                    raise ValueError("timestamp mismatch")
+
+                p1 = self._validate_person_payload(payload.get("p1"), slot="p1")
+                p2 = self._validate_person_payload(payload.get("p2"), slot="p2")
+                submitted_at = _now_iso()
+
+                conn.execute(
+                    """
+                    UPDATE annotations
+                    SET
+                        submitted_at=?,
+                        p1_bbox_x=?,
+                        p1_bbox_y=?,
+                        p1_bbox_w=?,
+                        p1_bbox_h=?,
+                        p1_source=?,
+                        p1_ai_track_id=?,
+                        p2_bbox_x=?,
+                        p2_bbox_y=?,
+                        p2_bbox_w=?,
+                        p2_bbox_h=?,
+                        p2_source=?,
+                        p2_ai_track_id=?
+                    WHERE annotation_id=?
+                    """,
+                    (
+                        submitted_at,
+                        p1["p1_bbox_x"],
+                        p1["p1_bbox_y"],
+                        p1["p1_bbox_w"],
+                        p1["p1_bbox_h"],
+                        p1["p1_source"],
+                        p1["p1_ai_track_id"],
+                        p2["p2_bbox_x"],
+                        p2["p2_bbox_y"],
+                        p2["p2_bbox_w"],
+                        p2["p2_bbox_h"],
+                        p2["p2_source"],
+                        p2["p2_ai_track_id"],
+                        annotation_id,
+                    ),
+                )
+
+                self._rebuild_track_person_stats(conn)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+        self.export_reviewed_csv_for_stem(stem)
+        return {
+            "annotation_id": annotation_id,
+            "submitted_at": submitted_at,
+            "video_stem": stem,
+            "frame_index": frame_index,
+        }
 
     def _get_cached_frame(self, key: Tuple[str, int]) -> bytes | None:
         with self._frame_cache_lock:
@@ -692,50 +925,7 @@ class AnnotationState:
                     "SELECT COUNT(*) AS c FROM track_person_stats"
                 ).fetchone()
                 if row is not None and int(row["c"] or 0) == 0:
-                    conn.executescript(
-                        """
-                        WITH stats AS (
-                            SELECT
-                                video_stem,
-                                p1_ai_track_id AS ai_track_id,
-                                SUM(CASE WHEN p1_source != 'absent' AND p1_ai_track_id != '' THEN 1 ELSE 0 END) AS p1_count,
-                                0 AS p2_count,
-                                MAX(submitted_at) AS last_updated_at
-                            FROM annotations
-                            WHERE p1_ai_track_id IS NOT NULL
-                              AND p1_ai_track_id != ''
-                              AND p1_source != 'absent'
-                            GROUP BY video_stem, p1_ai_track_id
-                            UNION ALL
-                            SELECT
-                                video_stem,
-                                p2_ai_track_id AS ai_track_id,
-                                0 AS p1_count,
-                                SUM(CASE WHEN p2_source != 'absent' AND p2_ai_track_id != '' THEN 1 ELSE 0 END) AS p2_count,
-                                MAX(submitted_at) AS last_updated_at
-                            FROM annotations
-                            WHERE p2_ai_track_id IS NOT NULL
-                              AND p2_ai_track_id != ''
-                              AND p2_source != 'absent'
-                            GROUP BY video_stem, p2_ai_track_id
-                        )
-                        INSERT INTO track_person_stats (
-                            video_stem,
-                            ai_track_id,
-                            p1_count,
-                            p2_count,
-                            last_updated_at
-                        )
-                        SELECT
-                            video_stem,
-                            ai_track_id,
-                            SUM(p1_count) AS p1_count,
-                            SUM(p2_count) AS p2_count,
-                            MAX(last_updated_at) AS last_updated_at
-                        FROM stats
-                        GROUP BY video_stem, ai_track_id
-                        """
-                    )
+                    self._rebuild_track_person_stats(conn)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1151,6 +1341,53 @@ class AnnotationState:
                 ),
             )
 
+    def _rebuild_track_person_stats(self, conn: sqlite3.Connection) -> None:
+        conn.execute("DELETE FROM track_person_stats")
+        conn.executescript(
+            """
+            WITH stats AS (
+                SELECT
+                    video_stem,
+                    p1_ai_track_id AS ai_track_id,
+                    SUM(CASE WHEN p1_source != 'absent' AND p1_ai_track_id != '' THEN 1 ELSE 0 END) AS p1_count,
+                    0 AS p2_count,
+                    MAX(submitted_at) AS last_updated_at
+                FROM annotations
+                WHERE p1_ai_track_id IS NOT NULL
+                  AND p1_ai_track_id != ''
+                  AND p1_source != 'absent'
+                GROUP BY video_stem, p1_ai_track_id
+                UNION ALL
+                SELECT
+                    video_stem,
+                    p2_ai_track_id AS ai_track_id,
+                    0 AS p1_count,
+                    SUM(CASE WHEN p2_source != 'absent' AND p2_ai_track_id != '' THEN 1 ELSE 0 END) AS p2_count,
+                    MAX(submitted_at) AS last_updated_at
+                FROM annotations
+                WHERE p2_ai_track_id IS NOT NULL
+                  AND p2_ai_track_id != ''
+                  AND p2_source != 'absent'
+                GROUP BY video_stem, p2_ai_track_id
+            )
+            INSERT INTO track_person_stats (
+                video_stem,
+                ai_track_id,
+                p1_count,
+                p2_count,
+                last_updated_at
+            )
+            SELECT
+                video_stem,
+                ai_track_id,
+                SUM(p1_count) AS p1_count,
+                SUM(p2_count) AS p2_count,
+                MAX(last_updated_at) AS last_updated_at
+            FROM stats
+            GROUP BY video_stem, ai_track_id
+            """
+        )
+
     def _validate_and_build_record(
         self, annotator_id: str, payload: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1248,6 +1485,10 @@ class UiHandler(BaseHTTPRequestHandler):
 
         if path == "/api/status":
             return self._send_json(HTTPStatus.OK, {"ok": True, "status": self.state.status_summary()})
+        if path == "/api/my_annotations":
+            return self._handle_my_annotations(parsed.query)
+        if path == "/api/annotation_detail":
+            return self._handle_annotation_detail(parsed.query)
         if path == "/api/frame_image":
             return self._handle_frame_image(parsed.query)
         if path == "/":
@@ -1265,6 +1506,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_next_frame()
         if path == "/api/submit":
             return self._handle_submit()
+        if path == "/api/update_annotation":
+            return self._handle_update_annotation()
         if path == "/api/export":
             return self._handle_export()
         self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
@@ -1324,6 +1567,21 @@ class UiHandler(BaseHTTPRequestHandler):
             )
         self._send_json(HTTPStatus.OK, {"ok": True, **result})
 
+    def _handle_update_annotation(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.update_annotation(annotator_id=annotator_id, payload=payload)
+        except Exception as exc:
+            self.state.logger.error(f"update_annotation failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, "updated": result})
+
     def _handle_export(self) -> None:
         try:
             counts = self.state.export_reviewed_csvs()
@@ -1375,6 +1633,40 @@ class UiHandler(BaseHTTPRequestHandler):
             )
             return None
         return payload
+
+    def _handle_my_annotations(self, query: str) -> None:
+        q = parse_qs(query)
+        annotator_id = str(q.get("annotator_id", [""])[0]).strip() or "annotator_unknown"
+        try:
+            annotations = self.state.list_annotations_for_annotator(annotator_id)
+        except Exception as exc:
+            self.state.logger.error(f"my_annotations failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, "annotations": annotations})
+
+    def _handle_annotation_detail(self, query: str) -> None:
+        q = parse_qs(query)
+        annotator_id = str(q.get("annotator_id", [""])[0]).strip() or "annotator_unknown"
+        annotation_id = str(q.get("annotation_id", [""])[0]).strip()
+        if not annotation_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "annotation_id is required"},
+            )
+        try:
+            data = self.state.annotation_detail(annotator_id, annotation_id)
+        except Exception as exc:
+            self.state.logger.error(
+                f"annotation_detail failed annotator={annotator_id} annotation_id={annotation_id}: {exc}"
+            )
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **data})
 
     def _send_json(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
