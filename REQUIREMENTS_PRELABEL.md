@@ -133,6 +133,7 @@
 
 - `--backend ultralytics`（默认）
 - `--backend hog`（兜底）
+- `--backend bytetrack`（ByteTrack/YOLOX 追踪，需 ByteTrack 仓库与 venv）
 
 补充模式：
 

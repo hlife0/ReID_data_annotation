@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -113,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--backend",
         type=str,
-        choices=["ultralytics", "hog"],
+        choices=["ultralytics", "hog", "bytetrack"],
         default="ultralytics",
         help="Prelabel backend",
     )
@@ -175,6 +177,53 @@ def parse_args() -> argparse.Namespace:
         "--only-task-extraction",
         action="store_true",
         help="Run only Step A0/A1 (input inspection + task manifest), skip A2 and validation",
+    )
+    parser.add_argument(
+        "--bytetrack-root",
+        type=Path,
+        default=Path("/data/hrli/ByteTrack"),
+        help="ByteTrack repo root (contains tools/track_api.py and venv/)",
+    )
+    parser.add_argument(
+        "--bytetrack-python",
+        type=Path,
+        default=None,
+        help="Optional explicit ByteTrack venv python path (default: <bytetrack_root>/venv/bin/python)",
+    )
+    parser.add_argument(
+        "--bytetrack-exp-file",
+        type=str,
+        default="exps/example/mot/yolox_x_mix_det.py",
+        help="ByteTrack exp file (relative to ByteTrack repo if not absolute)",
+    )
+    parser.add_argument(
+        "--bytetrack-ckpt",
+        type=str,
+        default="pretrained/bytetrack_x_mot17.pth.tar",
+        help="ByteTrack checkpoint (relative to ByteTrack repo if not absolute)",
+    )
+    parser.add_argument(
+        "--bytetrack-device",
+        type=str,
+        choices=["gpu", "cpu"],
+        default="gpu",
+        help="ByteTrack device",
+    )
+    parser.add_argument(
+        "--bytetrack-gpu-id",
+        type=str,
+        default=None,
+        help="CUDA_VISIBLE_DEVICES for ByteTrack (only when device=gpu)",
+    )
+    parser.add_argument(
+        "--bytetrack-fp16",
+        action="store_true",
+        help="Enable fp16 for ByteTrack",
+    )
+    parser.add_argument(
+        "--bytetrack-fuse",
+        action="store_true",
+        help="Enable conv+bn fuse for ByteTrack",
     )
     return parser.parse_args()
 
@@ -617,11 +666,196 @@ def run_one_video_ultralytics(
     logger.info(f"A2 done {task.video_stem}: rows_written={total_written}, output={output_csv}")
 
 
+def _iter_mot_rows(result_txt: Path):
+    with result_txt.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",")
+            if len(parts) < 7:
+                continue
+            try:
+                frame0 = int(float(parts[0]))
+                track_id = int(float(parts[1]))
+                x = float(parts[2])
+                y = float(parts[3])
+                w = float(parts[4])
+                h = float(parts[5])
+                score = float(parts[6])
+            except Exception:
+                continue
+            if w <= 0 or h <= 0:
+                continue
+            yield frame0, track_id, x, y, w, h, score
+
+
+def run_one_video_bytetrack(
+    task: Task,
+    output_csv: Path,
+    logger: RunLogger,
+    frame_stride: int,
+    bytetrack_root: Path,
+    bytetrack_python: Path | None,
+    exp_file: str,
+    ckpt: str,
+    device: str,
+    gpu_id: str | None,
+    fp16: bool,
+    fuse: bool,
+    logs_dir: Path,
+) -> None:
+    timestamps = load_timestamps(task.timestamp_path)
+    track_api = bytetrack_root / "tools" / "track_api.py"
+    if not track_api.exists():
+        logger.error(f"A2 failed {task.video_stem}: track_api.py not found under {bytetrack_root}")
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    if bytetrack_python is None:
+        bytetrack_python = bytetrack_root / "venv" / "bin" / "python"
+    if not bytetrack_python.exists():
+        logger.error(
+            f"A2 failed {task.video_stem}: ByteTrack python not found at {bytetrack_python}"
+        )
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    real_video = task.video_path.resolve()
+    if real_video != task.video_path:
+        logger.info(f"A2 {task.video_stem}: resolved symlink video path to {real_video}")
+
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = (logs_dir / f"bytetrack_{task.video_stem}.summary.json").resolve()
+
+    cmd = [
+        str(bytetrack_python),
+        str(track_api),
+        "run",
+        "--video",
+        str(real_video),
+        "--exp-file",
+        exp_file,
+        "--ckpt",
+        ckpt,
+        "--device",
+        device,
+        "--json-out",
+        str(summary_path),
+    ]
+    if device == "gpu" and gpu_id:
+        cmd += ["--gpu-id", str(gpu_id)]
+    if fp16:
+        cmd.append("--fp16")
+    if fuse:
+        cmd.append("--fuse")
+
+    if frame_stride > 1:
+        logger.info(
+            f"A2 {task.video_stem}: frame_stride={frame_stride} applied after ByteTrack run"
+        )
+
+    logger.info(f"A2 ByteTrack start {task.video_stem}: {' '.join(cmd)}")
+    result = subprocess.run(
+        cmd,
+        cwd=str(bytetrack_root),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "")[-2000:]
+        logger.error(f"A2 ByteTrack failed {task.video_stem}: {tail}")
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    if not summary_path.exists():
+        logger.error(
+            f"A2 ByteTrack failed {task.video_stem}: summary json not found {summary_path}"
+        )
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        result_txt = Path(summary["output"]["result_txt"])
+    except Exception as exc:
+        logger.error(f"A2 ByteTrack failed {task.video_stem}: parse summary error {exc}")
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    if not result_txt.exists():
+        logger.error(
+            f"A2 ByteTrack failed {task.video_stem}: result txt not found {result_txt}"
+        )
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        with output_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(OUTPUT_COLUMNS)
+        return
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    total_written = 0
+    missing_timestamp_count = 0
+    with output_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(OUTPUT_COLUMNS)
+        for frame0, track_id, x, y, w, h, score in _iter_mot_rows(result_txt):
+            frame_index = frame0 + 1
+            if frame_stride > 1 and ((frame_index - 1) % frame_stride != 0):
+                continue
+            timestamp_ms = timestamps.get(frame_index)
+            if timestamp_ms is None:
+                missing_timestamp_count += 1
+                continue
+            writer.writerow(
+                [
+                    task.video_stem,
+                    frame_index,
+                    timestamp_ms,
+                    track_id,
+                    f"{x:.3f}",
+                    f"{y:.3f}",
+                    f"{w:.3f}",
+                    f"{h:.3f}",
+                    f"{score:.6f}",
+                    "person",
+                    "unknown",
+                    "auto",
+                    "pending",
+                ]
+            )
+            total_written += 1
+
+    if missing_timestamp_count > 0:
+        logger.error(
+            f"A2 {task.video_stem}: {missing_timestamp_count} ByteTrack frames had no timestamp_ms"
+        )
+    if total_written == 0:
+        logger.error(f"A2 {task.video_stem}: ByteTrack output empty")
+    logger.info(f"A2 done {task.video_stem}: rows_written={total_written}, output={output_csv}")
+
+
 def run_one_video(
     task: Task,
     output_csv: Path,
     logger: RunLogger,
     args: argparse.Namespace,
+    logs_dir: Path,
 ) -> None:
     if args.backend == "ultralytics":
         run_one_video_ultralytics(
@@ -635,6 +869,23 @@ def run_one_video(
             device=args.device,
             imgsz=args.imgsz,
             yolo_config_dir=args.yolo_config_dir,
+        )
+        return
+    if args.backend == "bytetrack":
+        run_one_video_bytetrack(
+            task=task,
+            output_csv=output_csv,
+            logger=logger,
+            frame_stride=args.frame_stride,
+            bytetrack_root=args.bytetrack_root,
+            bytetrack_python=args.bytetrack_python,
+            exp_file=args.bytetrack_exp_file,
+            ckpt=args.bytetrack_ckpt,
+            device=args.bytetrack_device,
+            gpu_id=args.bytetrack_gpu_id,
+            fp16=args.bytetrack_fp16,
+            fuse=args.bytetrack_fuse,
+            logs_dir=logs_dir,
         )
         return
 
@@ -717,6 +968,13 @@ def main() -> None:
             f"Ultralytics config model={args.model}, tracker={args.tracker}, imgsz={args.imgsz}, "
             f"yolo_config_dir={args.yolo_config_dir}"
         )
+    if args.backend == "bytetrack":
+        logger.info(
+            "ByteTrack config "
+            f"root={args.bytetrack_root}, exp_file={args.bytetrack_exp_file}, ckpt={args.bytetrack_ckpt}, "
+            f"device={args.bytetrack_device}, gpu_id={args.bytetrack_gpu_id}, "
+            f"fp16={args.bytetrack_fp16}, fuse={args.bytetrack_fuse}"
+        )
 
     tasks = step_a0_input_inspection(required_root=args.required_root, logger=logger)
     write_manifest(tasks=tasks, manifest_path=manifest_path, logger=logger)
@@ -732,7 +990,7 @@ def main() -> None:
             logger.info(f"A2 skip blocked {task.video_stem}: {task.blocked_reason}")
             continue
         out_csv = pseudo_dir / f"{task.video_stem}.auto.csv"
-        run_one_video(task=task, output_csv=out_csv, logger=logger, args=args)
+        run_one_video(task=task, output_csv=out_csv, logger=logger, args=args, logs_dir=logs_dir)
 
     logger.info("Validation start")
     validated = validate_outputs(tasks=tasks, pseudo_dir=pseudo_dir, logger=logger)

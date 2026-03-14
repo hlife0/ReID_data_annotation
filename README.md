@@ -8,6 +8,15 @@
 
 ---
 
+## 当前状态（截至 2026-03-15）
+
+- A 阶段：ByteTrack 预标注已跑通，最新批次 `batch_20260314_v05`，已生成 `pseudo_labels/*.auto.csv` 与带框视频 `pseudo_labels/videos/*.boxed.mp4`。
+- B 阶段：UI 标注与后台服务可用，历史标注数据在 `batch_20260305_v03`（含 `ui_tasks/`、`reviewed/`、`reviewed_raw/`）。
+- C 阶段：IMU 比值分析产物在 `batch_20260306_v02/imu_mapping/`，分析汇总见 `C_STAGE_IMU_MAPPING_ANALYSIS.md`。
+- 新增需求：自动推荐（D）文档 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
+
+---
+
 ## 1. 根目录脚本规范
 
 根目录脚本统一前缀：
@@ -67,6 +76,23 @@ cd /home/hrli/data_annotation
   --device cuda:3 \
   --model yolo11x.pt \
   --tracker botsort.yaml
+```
+
+使用 ByteTrack（YOLOX）追踪：
+
+```bash
+cd /home/hrli/data_annotation
+.venv/bin/python ./process_prelabel_batch.py \
+  --required-root ./data/required \
+  --output-root . \
+  --backend bytetrack \
+  --bytetrack-root /data/hrli/ByteTrack \
+  --bytetrack-exp-file exps/example/mot/yolox_x_mix_det.py \
+  --bytetrack-ckpt pretrained/bytetrack_x_mot17.pth.tar \
+  --bytetrack-device gpu \
+  --bytetrack-gpu-id 2 \
+  --bytetrack-fp16 \
+  --bytetrack-fuse
 ```
 
 只抽任务（A0/A1，不跑推理）：
