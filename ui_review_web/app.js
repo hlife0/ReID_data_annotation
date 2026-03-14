@@ -59,6 +59,7 @@ const I18N = {
     history_empty: "暂无记录",
     toast_history_loaded: "已刷新标注记录",
     toast_edit_saved: "修改已保存",
+    progress_label: "进度",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "EN",
@@ -123,6 +124,7 @@ const I18N = {
     history_empty: "No records",
     toast_history_loaded: "History refreshed",
     toast_edit_saved: "Changes saved",
+    progress_label: "Progress",
     slot_p1: "P1",
     slot_p2: "P2",
     lang_toggle: "中",
@@ -138,6 +140,7 @@ const HANDLE_SIZE = 8;
 const MIN_BOX_SIZE = 2;
 const DEFAULT_ANNOTATOR_ID = "annotator_demo";
 const ANNOTATOR_STORAGE_KEY = "ui_review_annotator_id";
+const PROGRESS_TARGET = 3000;
 
 const state = {
   frame: null,
@@ -200,6 +203,10 @@ const refs = {
   refreshHistoryBtn: document.getElementById("refreshHistoryBtn"),
   saveEditBtn: document.getElementById("saveEditBtn"),
   exitEditBtn: document.getElementById("exitEditBtn"),
+  historyDock: document.getElementById("historyDock"),
+  historyToggleBtn: document.getElementById("historyToggleBtn"),
+  progressFill: document.getElementById("progressFill"),
+  progressText: document.getElementById("progressText"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -228,6 +235,9 @@ function applyLanguage() {
   refs.annotatorModalCloseBtn.title = t("annotator_modal_close");
   refs.annotatorModalCloseBtn.setAttribute("aria-label", t("annotator_modal_close"));
   refs.annotatorModalInput.placeholder = t("annotator_modal_input_placeholder");
+  if (refs.historyToggleBtn) {
+    refs.historyToggleBtn.title = t("history_title");
+  }
   const desc = document.getElementById("annotatorModalDesc");
   if (desc) {
     desc.textContent = t("annotator_modal_desc", { default_id: DEFAULT_ANNOTATOR_ID });
@@ -236,6 +246,7 @@ function applyLanguage() {
   syncSlotUI("p2");
   renderAiButtons();
   renderCurrentHint();
+  updateProgress();
 }
 
 function toggleLanguage() {
@@ -957,6 +968,7 @@ async function submitAndNext() {
     const result = await postJson("/api/submit", payload);
     exitEditMode();
     applyFrame(result.next_frame, { isAssignment: true });
+    loadHistory();
     showToastKey("toast_submitted", {
       video: result.submitted.video_stem,
       frame: result.submitted.frame_index,
@@ -1011,12 +1023,24 @@ function renderHistory() {
   }
 }
 
-async function loadHistory() {
+function updateProgress() {
+  if (!refs.progressFill || !refs.progressText) return;
+  const count = Array.isArray(state.history) ? state.history.length : 0;
+  const ratio = Math.min(1, count / PROGRESS_TARGET);
+  refs.progressFill.style.width = `${Math.round(ratio * 100)}%`;
+  refs.progressText.textContent = `${count}/${PROGRESS_TARGET}`;
+}
+
+async function loadHistory(options = {}) {
+  const { silent = false } = options;
   try {
     const payload = await getJson(`/api/my_annotations?annotator_id=${encodeURIComponent(annotatorId())}`);
     state.history = payload.annotations || [];
     renderHistory();
-    showToastKey("toast_history_loaded");
+    updateProgress();
+    if (!silent) {
+      showToastKey("toast_history_loaded");
+    }
   } catch (err) {
     showToast(err.message, true);
   }
@@ -1080,6 +1104,27 @@ function exitEditMode() {
   }
 }
 
+function initHistoryDock() {
+  const dock = refs.historyDock;
+  if (!dock) return;
+  const collapsed = localStorage.getItem("ui_review_history_collapsed") === "1";
+  dock.classList.toggle("collapsed", collapsed);
+  if (refs.historyToggleBtn) {
+    refs.historyToggleBtn.textContent = collapsed ? "⟩" : "⟨";
+  }
+}
+
+function toggleHistoryDock() {
+  const dock = refs.historyDock;
+  if (!dock) return;
+  const next = !dock.classList.contains("collapsed");
+  dock.classList.toggle("collapsed", next);
+  localStorage.setItem("ui_review_history_collapsed", next ? "1" : "0");
+  if (refs.historyToggleBtn) {
+    refs.historyToggleBtn.textContent = next ? "⟩" : "⟨";
+  }
+}
+
 async function saveEdit() {
   if (!state.editing || !state.frame) {
     return;
@@ -1102,7 +1147,7 @@ async function saveEdit() {
       p2: personSubmitPayload("p2"),
     };
     await postJson("/api/update_annotation", payload);
-    await loadHistory();
+    await loadHistory({ silent: true });
     showToastKey("toast_edit_saved");
   } catch (err) {
     showToast(err.message, true);
@@ -1114,7 +1159,7 @@ function initEvents() {
   refs.annotatorId.value = getStoredAnnotatorId() || DEFAULT_ANNOTATOR_ID;
   refs.annotatorId.addEventListener("change", () => {
     localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
-    loadHistory();
+    loadHistory({ silent: true });
   });
 
   refs.langToggleBtn.addEventListener("click", toggleLanguage);
@@ -1126,9 +1171,12 @@ function initEvents() {
   refs.p1AbsentBtn.addEventListener("click", () => markSlotAbsent("p1"));
   refs.p2AbsentBtn.addEventListener("click", () => markSlotAbsent("p2"));
 
-  refs.refreshHistoryBtn.addEventListener("click", loadHistory);
+  refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
   refs.saveEditBtn.addEventListener("click", saveEdit);
   refs.exitEditBtn.addEventListener("click", exitEditMode);
+  if (refs.historyToggleBtn && refs.historyDock) {
+    refs.historyToggleBtn.addEventListener("click", () => toggleHistoryDock());
+  }
 
   bindNumericInputs("p1");
   bindNumericInputs("p2");
@@ -1169,7 +1217,8 @@ function init() {
   }
   refs.saveEditBtn.hidden = true;
   refs.exitEditBtn.hidden = true;
-  loadHistory();
+  initHistoryDock();
+  loadHistory({ silent: true });
 }
 
 window.addEventListener("DOMContentLoaded", init);
