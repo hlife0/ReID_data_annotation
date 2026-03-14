@@ -56,6 +56,8 @@ const I18N = {
     history_refresh: "刷新",
     history_exit_edit: "退出编辑",
     history_save_edit: "保存修改",
+    history_expand: "展开记录",
+    history_collapse: "收起记录",
     history_empty: "暂无记录",
     toast_history_loaded: "已刷新标注记录",
     toast_edit_saved: "修改已保存",
@@ -121,6 +123,8 @@ const I18N = {
     history_refresh: "Refresh",
     history_exit_edit: "Exit Edit",
     history_save_edit: "Save Changes",
+    history_expand: "Show History",
+    history_collapse: "Hide History",
     history_empty: "No records",
     toast_history_loaded: "History refreshed",
     toast_edit_saved: "Changes saved",
@@ -235,8 +239,8 @@ function applyLanguage() {
   refs.annotatorModalCloseBtn.title = t("annotator_modal_close");
   refs.annotatorModalCloseBtn.setAttribute("aria-label", t("annotator_modal_close"));
   refs.annotatorModalInput.placeholder = t("annotator_modal_input_placeholder");
-  if (refs.historyToggleBtn) {
-    refs.historyToggleBtn.title = t("history_title");
+  if (refs.historyDock) {
+    setHistoryToggle(refs.historyDock.classList.contains("collapsed"));
   }
   const desc = document.getElementById("annotatorModalDesc");
   if (desc) {
@@ -1104,14 +1108,21 @@ function exitEditMode() {
   }
 }
 
+function setHistoryToggle(collapsed) {
+  if (!refs.historyToggleBtn) return;
+  const label = collapsed ? t("history_expand") : t("history_collapse");
+  refs.historyToggleBtn.textContent = collapsed ? "⟩" : "⟨";
+  refs.historyToggleBtn.title = label;
+  refs.historyToggleBtn.setAttribute("aria-label", label);
+  refs.historyToggleBtn.setAttribute("data-label", label);
+}
+
 function initHistoryDock() {
   const dock = refs.historyDock;
   if (!dock) return;
   const collapsed = localStorage.getItem("ui_review_history_collapsed") === "1";
   dock.classList.toggle("collapsed", collapsed);
-  if (refs.historyToggleBtn) {
-    refs.historyToggleBtn.textContent = collapsed ? "⟩" : "⟨";
-  }
+  setHistoryToggle(collapsed);
 }
 
 function toggleHistoryDock() {
@@ -1120,9 +1131,7 @@ function toggleHistoryDock() {
   const next = !dock.classList.contains("collapsed");
   dock.classList.toggle("collapsed", next);
   localStorage.setItem("ui_review_history_collapsed", next ? "1" : "0");
-  if (refs.historyToggleBtn) {
-    refs.historyToggleBtn.textContent = next ? "⟩" : "⟨";
-  }
+  setHistoryToggle(next);
 }
 
 async function saveEdit() {

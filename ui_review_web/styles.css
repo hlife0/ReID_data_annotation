@@ -226,9 +226,31 @@ select {
 
 .history-dock.collapsed #historyToggleBtn {
   position: fixed;
-  left: 8px;
+  left: 12px;
   top: 20px;
-  z-index: 30;
+  z-index: 40;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  padding: 10px 14px;
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(12, 30, 48, 0.28), 0 0 0 2px rgba(23, 114, 199, 0.25);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.history-dock.collapsed #historyToggleBtn::after {
+  content: attr(data-label);
+  font-size: 0.85rem;
+}
+
+.history-dock.collapsed #historyToggleBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 2px;
 }
 
 .history-hint {
