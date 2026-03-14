@@ -148,6 +148,14 @@
 - `p2_source`（`ai/manual_draw/manual_param/absent`）
 - `p2_ai_track_id`
 
+### 7.4 自动推荐（D 阶段扩展）
+
+若启用 D 阶段自动推荐：
+
+1. `/api/next_frame` 的 `frame` 会额外返回 `recommendations` 字段（详见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`）。
+2. UI 在用户未操作前，可自动应用推荐的 `track_id` 到 P1/P2。
+3. 统计表 `track_person_stats` 由提交时更新维护。
+
 ---
 
 ## 8. 导出规范
@@ -185,4 +193,25 @@
 
 ```bash
 .venv/bin/python ./ui_admin_server.py --batch-dir ./batch_20260305_v03 --port 10087
+```
+
+### 10.4 性能缓存（推荐）
+
+离线预热（先跑完缓存再开服务，避免标注时抢 CPU）：
+
+```bash
+.venv/bin/python ./ui_review_server.py \
+  --batch-dir ./batch_20260305_v03 \
+  --frame-cache-disk \
+  --frame-cache-prewarm-only
+```
+
+启动服务（启用缓存）：
+
+```bash
+.venv/bin/python ./ui_review_server.py \
+  --batch-dir ./batch_20260305_v03 \
+  --port 10086 \
+  --frame-cache-disk \
+  --frame-cache-max 512
 ```

@@ -26,6 +26,7 @@ const I18N = {
     src_absent: "不存在",
     no_ai_box: "该帧无AI框",
     hint_start: "先加载一帧开始标注。",
+    hint_loading: "正在加载帧图...",
     hint_ready: "准备就绪",
     hint_drag_resize: "拖动可移动框，拖拽控制点可缩放，或点击“绘制新框”手动画框。",
     hint_load_fail: "帧图加载失败。",
@@ -39,6 +40,7 @@ const I18N = {
     toast_no_frame: "当前没有可操作帧",
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
+    toast_recommend_applied: "已根据历史推荐 P1/P2",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -80,6 +82,7 @@ const I18N = {
     src_absent: "absent",
     no_ai_box: "No AI box in this frame",
     hint_start: "Load a frame to start.",
+    hint_loading: "Loading frame image...",
     hint_ready: "Ready",
     hint_drag_resize: "Drag box to move, drag handles to resize, or click Draw New Box.",
     hint_load_fail: "Failed to load frame image.",
@@ -93,6 +96,7 @@ const I18N = {
     toast_no_frame: "No frame loaded",
     toast_ai_not_found: "AI track not found",
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
+    toast_recommend_applied: "Applied historical P1/P2 recommendations",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -136,6 +140,7 @@ const state = {
   hintKey: "hint_start",
   hintVars: {},
   initialFrameRequested: false,
+  imageRequestId: 0,
 };
 
 const refs = {
@@ -426,8 +431,12 @@ function applyFrame(frame) {
       state.aiByTrack.set(tid, box);
     }
   }
+  state.image = null;
+  drawCanvas();
+  setHintByKey("hint_loading");
   renderAiButtons();
   resetSlots();
+  applyRecommendations(frame.recommendations);
   syncHeader();
   loadImage(frame.image_url);
 }
@@ -462,9 +471,44 @@ function renderAiButtonsForSlot(slot) {
   }
 }
 
+function canAutoApply(slot) {
+  const s = state.slots[slot];
+  return s.source === "not_set" && !bboxValid(s.bbox) && !s.aiTrackId;
+}
+
+function applyRecommendations(recommendations) {
+  if (!Array.isArray(recommendations) || recommendations.length === 0) {
+    return;
+  }
+  let applied = false;
+  for (const rec of recommendations) {
+    const trackId = String(rec.track_id);
+    const person = String(rec.recommended_person || "");
+    if (!state.aiByTrack.has(trackId)) {
+      continue;
+    }
+    if (person === "p1" && canAutoApply("p1")) {
+      applyAiToSlot("p1", trackId);
+      applied = true;
+    }
+    if (person === "p2" && canAutoApply("p2")) {
+      applyAiToSlot("p2", trackId);
+      applied = true;
+    }
+  }
+  if (applied) {
+    showToastKey("toast_recommend_applied");
+  }
+}
+
 function loadImage(url) {
   const img = new Image();
+  const requestId = ++state.imageRequestId;
+  img.decoding = "async";
   img.onload = () => {
+    if (requestId !== state.imageRequestId) {
+      return;
+    }
     state.image = img;
     refs.canvas.width = img.width;
     refs.canvas.height = img.height;
@@ -472,6 +516,9 @@ function loadImage(url) {
     setHintByKey("hint_drag_resize");
   };
   img.onerror = () => {
+    if (requestId !== state.imageRequestId) {
+      return;
+    }
     setHintByKey("hint_load_fail");
     showToastKey("toast_frame_load_failed", {}, true);
   };

@@ -7,6 +7,14 @@
 
 ---
 
+## 实现状态（2026-03-15）
+
+- 已落地于 `ui_review_server.py` 与 `ui_review_web/app.js`。
+- 数据表 `track_person_stats` 已创建并在提交时更新。
+- `/api/next_frame` 返回 `frame.recommendations`，UI 会在用户未操作前自动应用。
+
+---
+
 ## 2. 核心思想（强制）
 
 对每个视频，维护一个“AI track_id → 人物(P1/P2)”的历史统计表。  

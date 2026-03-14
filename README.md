@@ -1,19 +1,20 @@
 # Data Annotation Pipeline
 
-本项目包含三阶段流程：
+本项目包含三阶段流程 + D 阶段增强：
 
 1. **预标注批处理**（A 阶段）
 2. **UI 双人标注与复标分发**（B 阶段）
 3. **双 IMU 静止/运动比值分析与人物对应辅助**（C 阶段）
+4. **基于历史 Track ID 的自动推荐**（D 阶段）
 
 ---
 
 ## 当前状态（截至 2026-03-15）
 
 - A 阶段：ByteTrack 预标注已跑通，最新批次 `batch_20260314_v05`，已生成 `pseudo_labels/*.auto.csv` 与带框视频 `pseudo_labels/videos/*.boxed.mp4`。
-- B 阶段：UI 标注与后台服务可用，历史标注数据在 `batch_20260305_v03`（含 `ui_tasks/`、`reviewed/`、`reviewed_raw/`）。
+- B 阶段：UI 标注与后台服务可用；历史标注数据在 `batch_20260305_v03`，最新批次推荐使用 `batch_20260314_v05`。
 - C 阶段：IMU 比值分析产物在 `batch_20260306_v02/imu_mapping/`，分析汇总见 `C_STAGE_IMU_MAPPING_ANALYSIS.md`。
-- 新增需求：自动推荐（D）文档 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
+- D 阶段：自动推荐已实现（`ui_review_server.py` + `ui_review_web/app.js`），文档见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
 
 ---
 
@@ -107,9 +108,25 @@ cd /home/hrli/data_annotation
 
 ### 4.1 启动标注服务
 
+建议先做离线帧缓存（避免标注时抢 CPU）：
+
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./ui_review_server.py --batch-dir ./batch_20260305_v03 --port 10086
+.venv/bin/python ./ui_review_server.py \
+  --batch-dir ./batch_20260314_v05 \
+  --frame-cache-disk \
+  --frame-cache-prewarm-only
+```
+
+再启动服务（内存 + 磁盘缓存）：
+
+```bash
+cd /home/hrli/data_annotation
+.venv/bin/python ./ui_review_server.py \
+  --batch-dir ./batch_20260314_v05 \
+  --port 10086 \
+  --frame-cache-disk \
+  --frame-cache-max 512
 ```
 
 访问：`http://localhost:10086`
@@ -118,7 +135,7 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./ui_admin_server.py --batch-dir ./batch_20260305_v03 --port 10087
+.venv/bin/python ./ui_admin_server.py --batch-dir ./batch_20260314_v05 --port 10087
 ```
 
 访问：`http://localhost:10087`
@@ -129,6 +146,7 @@ cd /home/hrli/data_annotation
 - AI 框应用 / 手绘 / 参数编辑 / 不存在（`absent`）
 - 拖拽移动与缩放，参数双向同步
 - 提交后写库并自动分配下一帧
+- 支持基于历史 `track_id` 的自动推荐（D 阶段）
 
 ---
 
@@ -201,4 +219,5 @@ cd /home/hrli/data_annotation
 - 预标注规范：`REQUIREMENTS_PRELABEL.md`
 - UI 规范：`REQUIREMENTS_UI_REVIEW.md`
 - IMU 映射规范：`REQUIREMENTS_IMU_MAPPING.md`
+- 自动推荐规范：`REQUIREMENTS_TRACK_RECOMMENDATION.md`
 - 入口说明：`REQUIREMENTS.md`

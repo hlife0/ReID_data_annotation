@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
@@ -107,11 +108,12 @@ class RunLogger:
 
 
 class VideoFrameReader:
-    def __init__(self, video_paths: Dict[str, Path]) -> None:
+    def __init__(self, video_paths: Dict[str, Path], jpeg_quality: int = 88) -> None:
         self._video_paths = video_paths
         self._captures: Dict[str, cv2.VideoCapture] = {}
         self._locks: Dict[str, threading.Lock] = {}
         self._meta: Dict[str, Tuple[int, int]] = {}
+        self._jpeg_quality = int(max(10, min(100, jpeg_quality)))
 
     def get_dimensions(self, video_stem: str) -> Tuple[int, int]:
         self._ensure_open(video_stem)
@@ -131,7 +133,7 @@ class VideoFrameReader:
             ok_encode, buf = cv2.imencode(
                 ".jpg",
                 frame,
-                [cv2.IMWRITE_JPEG_QUALITY, 88],
+                [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality],
             )
             if not ok_encode:
                 raise ValueError(
@@ -167,6 +169,10 @@ class AnnotationState:
         static_dir: Path,
         seed: int,
         reset_storage: bool,
+        frame_cache_dir: Path | None,
+        frame_cache_prewarm: bool,
+        frame_cache_max: int,
+        frame_cache_quality: int,
     ) -> None:
         self.batch_dir = batch_dir
         self.static_dir = static_dir
@@ -187,12 +193,18 @@ class AnnotationState:
         self._rng = random.Random(seed)
         self._lock = threading.Lock()
         self.reset_storage = reset_storage
+        self.frame_cache_dir = frame_cache_dir
+        self.frame_cache_prewarm = frame_cache_prewarm
+        self.frame_cache_quality = frame_cache_quality
 
         self.video_paths: Dict[str, Path] = {}
         self.frame_pool: List[FrameRecord] = []
         self.frame_lookup: Dict[Tuple[str, int], FrameRecord] = {}
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, float | int]]] = {}
         self.reader: VideoFrameReader | None = None
+        self._frame_cache: OrderedDict[Tuple[str, int], bytes] = OrderedDict()
+        self._frame_cache_lock = threading.Lock()
+        self._frame_cache_max = int(max(0, frame_cache_max))
 
     def initialize(self) -> None:
         self.ui_task_dir.mkdir(parents=True, exist_ok=True)
@@ -212,7 +224,12 @@ class AnnotationState:
         self._init_database()
         self._sync_counts_csv_from_db()
         self._sync_assignment_log_csv_from_db()
-        self.reader = VideoFrameReader(self.video_paths)
+        self.reader = VideoFrameReader(self.video_paths, jpeg_quality=self.frame_cache_quality)
+        if self.frame_cache_dir is not None:
+            self.frame_cache_dir.mkdir(parents=True, exist_ok=True)
+            if self.frame_cache_prewarm:
+                thread = threading.Thread(target=self._prewarm_disk_cache, daemon=True)
+                thread.start()
         self.logger.info(
             f"UI review service init done, total_frames={len(self.frame_pool)}, db={self.db_path}"
         )
@@ -276,6 +293,7 @@ class AnnotationState:
                 before = int(row["annotation_count"])
 
                 self._insert_annotation(conn, annotation_record)
+                self._update_track_person_stats(conn, annotation_record)
                 conn.execute(
                     """
                     UPDATE frame_counts
@@ -433,7 +451,92 @@ class AnnotationState:
     def frame_image_bytes(self, video_stem: str, frame_index: int) -> bytes:
         if self.reader is None:
             raise RuntimeError("state not initialized")
-        return self.reader.read_jpeg(video_stem, frame_index)
+        key = (video_stem, frame_index)
+        cached = self._get_cached_frame(key)
+        if cached is not None:
+            return cached
+        if self.frame_cache_dir is not None:
+            disk_path = self._frame_cache_path(video_stem, frame_index)
+            if disk_path.exists():
+                image = disk_path.read_bytes()
+                self._set_cached_frame(key, image)
+                return image
+
+        image = self.reader.read_jpeg(video_stem, frame_index)
+        self._set_cached_frame(key, image)
+        if self.frame_cache_dir is not None:
+            self._write_disk_cache(video_stem, frame_index, image)
+        return image
+
+    def _get_cached_frame(self, key: Tuple[str, int]) -> bytes | None:
+        with self._frame_cache_lock:
+            data = self._frame_cache.get(key)
+            if data is None:
+                return None
+            self._frame_cache.move_to_end(key)
+            return data
+
+    def _set_cached_frame(self, key: Tuple[str, int], data: bytes) -> None:
+        with self._frame_cache_lock:
+            self._frame_cache[key] = data
+            self._frame_cache.move_to_end(key)
+            while len(self._frame_cache) > self._frame_cache_max:
+                self._frame_cache.popitem(last=False)
+
+    def _frame_cache_path(self, video_stem: str, frame_index: int) -> Path:
+        if self.frame_cache_dir is None:
+            raise RuntimeError("disk cache not enabled")
+        safe_stem = video_stem.replace("/", "_")
+        return self.frame_cache_dir / safe_stem / f"{frame_index:06d}.jpg"
+
+    def _write_disk_cache(self, video_stem: str, frame_index: int, data: bytes) -> None:
+        path = self._frame_cache_path(video_stem, frame_index)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(".tmp")
+        try:
+            tmp_path.write_bytes(data)
+            tmp_path.replace(path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+
+    def _prewarm_disk_cache(self) -> None:
+        if self.frame_cache_dir is None:
+            return
+        self.logger.info("frame cache prewarm started")
+        for stem, video_path in self.video_paths.items():
+            try:
+                cap = cv2.VideoCapture(str(video_path))
+                if not cap.isOpened():
+                    self.logger.error(f"frame cache prewarm failed to open video: {video_path}")
+                    continue
+                frame_index = 0
+                while True:
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        break
+                    frame_index += 1
+                    cache_path = self._frame_cache_path(stem, frame_index)
+                    if cache_path.exists():
+                        continue
+                    ok_encode, buf = cv2.imencode(
+                        ".jpg",
+                        frame,
+                        [cv2.IMWRITE_JPEG_QUALITY, self.frame_cache_quality],
+                    )
+                    if not ok_encode:
+                        continue
+                    self._write_disk_cache(stem, frame_index, bytes(buf))
+                    if frame_index % 300 == 0:
+                        self.logger.info(
+                            f"frame cache prewarm {stem}: cached {frame_index} frames"
+                        )
+            finally:
+                if "cap" in locals():
+                    cap.release()
+        self.logger.info("frame cache prewarm finished")
+
+    def prewarm_disk_cache_blocking(self) -> None:
+        self._prewarm_disk_cache()
 
     def _reset_storage_artifacts(self) -> None:
         self.db_path.unlink(missing_ok=True)
@@ -517,6 +620,15 @@ class AnnotationState:
                     p2_ai_track_id TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS track_person_stats (
+                    video_stem TEXT NOT NULL,
+                    ai_track_id TEXT NOT NULL,
+                    p1_count INTEGER NOT NULL DEFAULT 0,
+                    p2_count INTEGER NOT NULL DEFAULT 0,
+                    last_updated_at TEXT NOT NULL,
+                    PRIMARY KEY (video_stem, ai_track_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_annotations_annotator
                 ON annotations (annotator_id);
                 CREATE INDEX IF NOT EXISTS idx_annotations_frame
@@ -529,6 +641,7 @@ class AnnotationState:
             if self.reset_storage:
                 conn.execute("DELETE FROM assignments")
                 conn.execute("DELETE FROM annotations")
+                conn.execute("DELETE FROM track_person_stats")
                 conn.execute("DELETE FROM frame_counts")
                 conn.execute("DELETE FROM frames")
 
@@ -573,6 +686,56 @@ class AnnotationState:
                 )
                 """
             )
+
+            if not self.reset_storage:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM track_person_stats"
+                ).fetchone()
+                if row is not None and int(row["c"] or 0) == 0:
+                    conn.executescript(
+                        """
+                        WITH stats AS (
+                            SELECT
+                                video_stem,
+                                p1_ai_track_id AS ai_track_id,
+                                SUM(CASE WHEN p1_source != 'absent' AND p1_ai_track_id != '' THEN 1 ELSE 0 END) AS p1_count,
+                                0 AS p2_count,
+                                MAX(submitted_at) AS last_updated_at
+                            FROM annotations
+                            WHERE p1_ai_track_id IS NOT NULL
+                              AND p1_ai_track_id != ''
+                              AND p1_source != 'absent'
+                            GROUP BY video_stem, p1_ai_track_id
+                            UNION ALL
+                            SELECT
+                                video_stem,
+                                p2_ai_track_id AS ai_track_id,
+                                0 AS p1_count,
+                                SUM(CASE WHEN p2_source != 'absent' AND p2_ai_track_id != '' THEN 1 ELSE 0 END) AS p2_count,
+                                MAX(submitted_at) AS last_updated_at
+                            FROM annotations
+                            WHERE p2_ai_track_id IS NOT NULL
+                              AND p2_ai_track_id != ''
+                              AND p2_source != 'absent'
+                            GROUP BY video_stem, p2_ai_track_id
+                        )
+                        INSERT INTO track_person_stats (
+                            video_stem,
+                            ai_track_id,
+                            p1_count,
+                            p2_count,
+                            last_updated_at
+                        )
+                        SELECT
+                            video_stem,
+                            ai_track_id,
+                            SUM(p1_count) AS p1_count,
+                            SUM(p2_count) AS p2_count,
+                            MAX(last_updated_at) AS last_updated_at
+                        FROM stats
+                        GROUP BY video_stem, ai_track_id
+                        """
+                    )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -798,6 +961,52 @@ class AnnotationState:
             raise RuntimeError("no candidate frame found")
         return min_rows[self._rng.randrange(len(min_rows))]
 
+    def _build_recommendations(
+        self,
+        conn: sqlite3.Connection,
+        video_stem: str,
+        ai_boxes: List[Dict[str, float | int]],
+    ) -> List[Dict[str, str]]:
+        if not ai_boxes:
+            return []
+        raw_ids = {str(box.get("track_id")) for box in ai_boxes}
+        track_ids = [tid for tid in raw_ids if tid and tid != "None"]
+        if not track_ids:
+            return []
+        try:
+            track_ids.sort(key=lambda x: int(float(x)))
+        except Exception:
+            track_ids.sort()
+
+        placeholders = ",".join(["?"] * len(track_ids))
+        rows = conn.execute(
+            f"""
+            SELECT ai_track_id, p1_count, p2_count
+            FROM track_person_stats
+            WHERE video_stem=? AND ai_track_id IN ({placeholders})
+            """,
+            [video_stem, *track_ids],
+        ).fetchall()
+        counts = {
+            str(r["ai_track_id"]): (int(r["p1_count"]), int(r["p2_count"]))
+            for r in rows
+        }
+
+        recommendations: List[Dict[str, str]] = []
+        for tid in track_ids:
+            if tid not in counts:
+                continue
+            p1c, p2c = counts[tid]
+            if p1c == p2c:
+                continue
+            recommendations.append(
+                {
+                    "track_id": tid,
+                    "recommended_person": "p1" if p1c > p2c else "p2",
+                }
+            )
+        return recommendations
+
     def _create_and_insert_assignment(
         self,
         conn: sqlite3.Connection,
@@ -845,6 +1054,11 @@ class AnnotationState:
         )
 
         width, height = self.reader.get_dimensions(stem)
+        recommendations = self._build_recommendations(
+            conn=conn,
+            video_stem=stem,
+            ai_boxes=self.ai_boxes.get(key, []),
+        )
         payload = {
             "assignment_id": assignment_id,
             "video_stem": stem,
@@ -854,6 +1068,7 @@ class AnnotationState:
             "image_width": width,
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),
+            "recommendations": recommendations,
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
@@ -896,6 +1111,45 @@ class AnnotationState:
             """,
             tuple(record[k] for k in REVIEWED_COLUMNS),
         )
+
+    def _update_track_person_stats(self, conn: sqlite3.Connection, record: Dict[str, Any]) -> None:
+        updates: Dict[str, Dict[str, int]] = {}
+        for slot in ("p1", "p2"):
+            source = str(record.get(f"{slot}_source", ""))
+            track_id = str(record.get(f"{slot}_ai_track_id", "") or "").strip()
+            if source == "absent" or not track_id:
+                continue
+            entry = updates.setdefault(track_id, {"p1": 0, "p2": 0})
+            entry[slot] += 1
+
+        if not updates:
+            return
+
+        now = _now_iso()
+        for track_id, inc in updates.items():
+            conn.execute(
+                """
+                INSERT INTO track_person_stats (
+                    video_stem,
+                    ai_track_id,
+                    p1_count,
+                    p2_count,
+                    last_updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(video_stem, ai_track_id) DO UPDATE SET
+                    p1_count = p1_count + excluded.p1_count,
+                    p2_count = p2_count + excluded.p2_count,
+                    last_updated_at = excluded.last_updated_at
+                """,
+                (
+                    record["video_stem"],
+                    track_id,
+                    inc["p1"],
+                    inc["p2"],
+                    now,
+                ),
+            )
 
     def _validate_and_build_record(
         self, annotator_id: str, payload: Dict[str, Any]
@@ -1170,6 +1424,33 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Initialize storage and exit without starting HTTP server",
     )
+    parser.add_argument(
+        "--frame-cache-disk",
+        action="store_true",
+        help="Enable on-disk JPEG cache under batch_dir/ui_tasks/frame_cache",
+    )
+    parser.add_argument(
+        "--frame-cache-prewarm",
+        action="store_true",
+        help="Prewarm disk cache in background by decoding full videos",
+    )
+    parser.add_argument(
+        "--frame-cache-prewarm-only",
+        action="store_true",
+        help="Prewarm disk cache in foreground then exit (requires --frame-cache-disk)",
+    )
+    parser.add_argument(
+        "--frame-cache-max",
+        type=int,
+        default=256,
+        help="In-memory LRU cache size for frames (0 to disable)",
+    )
+    parser.add_argument(
+        "--frame-cache-jpeg-quality",
+        type=int,
+        default=88,
+        help="JPEG quality for cached frames (1-100)",
+    )
     return parser.parse_args()
 
 
@@ -1182,14 +1463,28 @@ def main() -> None:
     static_dir = (Path(__file__).resolve().parent / "ui_review_web").resolve()
     if not args.init_only and not static_dir.exists():
         raise SystemExit(f"static directory does not exist: {static_dir}")
+    if args.frame_cache_prewarm_only and not args.frame_cache_disk:
+        raise SystemExit("--frame-cache-prewarm-only requires --frame-cache-disk")
+    if args.frame_cache_prewarm_only and args.init_only:
+        raise SystemExit("--frame-cache-prewarm-only should not be combined with --init-only")
 
     state = AnnotationState(
         batch_dir=batch_dir,
         static_dir=static_dir,
         seed=args.seed,
         reset_storage=args.reset_storage,
+        frame_cache_dir=(batch_dir / "ui_tasks" / "frame_cache") if args.frame_cache_disk else None,
+        frame_cache_prewarm=args.frame_cache_prewarm and not args.frame_cache_prewarm_only,
+        frame_cache_max=args.frame_cache_max,
+        frame_cache_quality=args.frame_cache_jpeg_quality,
     )
     state.initialize()
+
+    if args.frame_cache_prewarm_only:
+        state.prewarm_disk_cache_blocking()
+        state.logger.info("frame cache prewarm-only done")
+        state.close()
+        return
 
     if args.init_only:
         state.logger.info("init-only done")
