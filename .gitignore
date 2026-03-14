@@ -11,8 +11,13 @@ batch_*/
 # Runtime/config secrets
 ngrok.yml
 
+# Repo-specific SSH keys
+.ssh_reid_data_annotation
+.ssh_reid_data_annotation.pub
+
 # Local tools binaries
 tools/
 
 # Misc
 *.log
+nohup.out
