@@ -144,7 +144,7 @@ const HANDLE_SIZE = 8;
 const MIN_BOX_SIZE = 2;
 const DEFAULT_ANNOTATOR_ID = "annotator_demo";
 const ANNOTATOR_STORAGE_KEY = "ui_review_annotator_id";
-const PROGRESS_TARGET = 3000;
+const PROGRESS_TARGET = 4000;
 
 const state = {
   frame: null,
