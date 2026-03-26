@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
@@ -205,6 +205,9 @@ class AnnotationState:
         self._frame_cache: OrderedDict[Tuple[str, int], bytes] = OrderedDict()
         self._frame_cache_lock = threading.Lock()
         self._frame_cache_max = int(max(0, frame_cache_max))
+        self._dispatch_queue: deque[Tuple[str, int]] = deque()
+        self._dispatch_bucket_count: int | None = None
+        self._dispatch_generation = 0
 
     def initialize(self) -> None:
         self.ui_task_dir.mkdir(parents=True, exist_ok=True)
@@ -225,6 +228,9 @@ class AnnotationState:
         self._sync_counts_csv_from_db()
         self._sync_assignment_log_csv_from_db()
         self.reader = VideoFrameReader(self.video_paths, jpeg_quality=self.frame_cache_quality)
+        self._dispatch_queue.clear()
+        self._dispatch_bucket_count = None
+        self._dispatch_generation = 0
         if self.frame_cache_dir is not None:
             self.frame_cache_dir.mkdir(parents=True, exist_ok=True)
             if self.frame_cache_prewarm:
@@ -242,6 +248,7 @@ class AnnotationState:
         with self._lock:
             conn = self._connect()
             assignment_csv_row: Dict[str, Any] | None = None
+            prefetch_frames: List[Dict[str, Any]] = []
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 picked_row = self._pick_next_frame_row(conn)
@@ -251,6 +258,7 @@ class AnnotationState:
                     annotator_id=annotator_id,
                     reason=reason,
                 )
+                prefetch_frames = self._build_prefetch_frames(conn, limit=5)
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -260,7 +268,10 @@ class AnnotationState:
 
             if assignment_csv_row is not None:
                 self._append_assignment_csv_row(assignment_csv_row)
-            return assignment
+            return {
+                "frame": assignment,
+                "prefetch_frames": prefetch_frames,
+            }
 
     def submit_and_assign_next(
         self,
@@ -276,6 +287,7 @@ class AnnotationState:
             count_after_submit = 0
             next_assignment: Dict[str, Any] | None = None
             next_assignment_csv_row: Dict[str, Any] | None = None
+            prefetch_frames: List[Dict[str, Any]] = []
 
             conn = self._connect()
             try:
@@ -311,6 +323,7 @@ class AnnotationState:
                     annotator_id=annotator_id,
                     reason="after_submit",
                 )
+                prefetch_frames = self._build_prefetch_frames(conn, limit=5)
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -339,6 +352,7 @@ class AnnotationState:
                     "count_after_submit": count_after_submit,
                 },
                 "next_frame": next_assignment,
+                "prefetch_frames": prefetch_frames,
             }
 
     def export_reviewed_csvs(self) -> Dict[str, int]:
@@ -1123,33 +1137,136 @@ class AnnotationState:
                 writer.writeheader()
             writer.writerow({k: row.get(k, "") for k in ASSIGNMENT_COLUMNS})
 
-    def _pick_next_frame_row(self, conn: sqlite3.Connection) -> sqlite3.Row:
-        lt3_rows = conn.execute(
+    def _resolve_active_bucket_count(self, conn: sqlite3.Connection) -> int:
+        row = conn.execute(
             """
-            SELECT video_stem, frame_index, annotation_count
+            SELECT
+                SUM(CASE WHEN annotation_count = 0 THEN 1 ELSE 0 END) AS bucket_0,
+                SUM(CASE WHEN annotation_count = 1 THEN 1 ELSE 0 END) AS bucket_1,
+                SUM(CASE WHEN annotation_count = 2 THEN 1 ELSE 0 END) AS bucket_2,
+                MIN(annotation_count) AS min_count
             FROM frame_counts
-            WHERE annotation_count < 3
             """
-        ).fetchall()
-
-        if lt3_rows:
-            return lt3_rows[self._rng.randrange(len(lt3_rows))]
-
-        min_row = conn.execute("SELECT MIN(annotation_count) AS min_count FROM frame_counts").fetchone()
-        if min_row is None or min_row["min_count"] is None:
+        ).fetchone()
+        if row is None or row["min_count"] is None:
             raise RuntimeError("frame pool is empty")
-        min_count = int(min_row["min_count"])
-        min_rows = conn.execute(
+        if int(row["bucket_0"] or 0) > 0:
+            return 0
+        if int(row["bucket_1"] or 0) > 0:
+            return 1
+        if int(row["bucket_2"] or 0) > 0:
+            return 2
+        return int(row["min_count"])
+
+    def _list_bucket_candidate_keys(
+        self,
+        conn: sqlite3.Connection,
+        bucket_count: int,
+    ) -> List[Tuple[str, int]]:
+        rows = conn.execute(
             """
-            SELECT video_stem, frame_index, annotation_count
+            SELECT video_stem, frame_index
             FROM frame_counts
             WHERE annotation_count = ?
+            ORDER BY video_stem ASC, frame_index ASC
             """,
-            (min_count,),
+            (bucket_count,),
         ).fetchall()
-        if not min_rows:
-            raise RuntimeError("no candidate frame found")
-        return min_rows[self._rng.randrange(len(min_rows))]
+        return [(str(r["video_stem"]), int(r["frame_index"])) for r in rows]
+
+    def _rebuild_dispatch_queue(self, conn: sqlite3.Connection, bucket_count: int) -> None:
+        keys = self._list_bucket_candidate_keys(conn, bucket_count)
+        if not keys:
+            raise RuntimeError(f"dispatch bucket {bucket_count} has no candidates")
+        self._rng.shuffle(keys)
+        self._dispatch_queue = deque(keys)
+        self._dispatch_bucket_count = bucket_count
+        self._dispatch_generation += 1
+        self.logger.info(
+            "dispatch queue rebuilt "
+            f"generation={self._dispatch_generation} "
+            f"bucket={bucket_count} size={len(keys)}"
+        )
+
+    def _pop_next_valid_dispatch_row(
+        self,
+        conn: sqlite3.Connection,
+        bucket_count: int,
+    ) -> sqlite3.Row | None:
+        while self._dispatch_queue:
+            stem, frame_index = self._dispatch_queue.popleft()
+            row = conn.execute(
+                """
+                SELECT video_stem, frame_index, annotation_count
+                FROM frame_counts
+                WHERE video_stem=? AND frame_index=?
+                """,
+                (stem, frame_index),
+            ).fetchone()
+            if row is None:
+                continue
+            if int(row["annotation_count"]) != bucket_count:
+                continue
+            return row
+        return None
+
+    def _build_prefetch_frames(
+        self,
+        conn: sqlite3.Connection,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        if limit <= 0 or self.reader is None or self._dispatch_bucket_count is None:
+            return []
+
+        prefetch_frames: List[Dict[str, Any]] = []
+        dim_cache: Dict[str, Tuple[int, int]] = {}
+        bucket_count = int(self._dispatch_bucket_count)
+        for stem, frame_index in list(self._dispatch_queue):
+            if len(prefetch_frames) >= limit:
+                break
+            row = conn.execute(
+                """
+                SELECT annotation_count
+                FROM frame_counts
+                WHERE video_stem=? AND frame_index=?
+                """,
+                (stem, frame_index),
+            ).fetchone()
+            if row is None or int(row["annotation_count"]) != bucket_count:
+                continue
+            key = (stem, frame_index)
+            rec = self.frame_lookup.get(key)
+            if rec is None:
+                continue
+            if stem not in dim_cache:
+                dim_cache[stem] = self.reader.get_dimensions(stem)
+            width, height = dim_cache[stem]
+            prefetch_frames.append(
+                {
+                    "video_stem": stem,
+                    "frame_index": frame_index,
+                    "timestamp_ms": _safe_float(rec.timestamp_ms),
+                    "annotation_count": bucket_count,
+                    "image_width": width,
+                    "image_height": height,
+                    "ai_boxes": self.ai_boxes.get(key, []),
+                    "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
+                }
+            )
+        return prefetch_frames
+
+    def _pick_next_frame_row(self, conn: sqlite3.Connection) -> sqlite3.Row:
+        while True:
+            bucket_count = self._resolve_active_bucket_count(conn)
+            if self._dispatch_bucket_count != bucket_count or not self._dispatch_queue:
+                self._rebuild_dispatch_queue(conn, bucket_count)
+
+            row = self._pop_next_valid_dispatch_row(conn, bucket_count)
+            if row is not None:
+                return row
+
+            self._dispatch_queue.clear()
+            self._dispatch_bucket_count = None
 
     def _build_recommendations(
         self,
@@ -1540,7 +1657,7 @@ class UiHandler(BaseHTTPRequestHandler):
             return
         annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
         try:
-            assignment = self.state.assign_next_frame(
+            result = self.state.assign_next_frame(
                 annotator_id=annotator_id,
                 reason="manual_next",
             )
@@ -1550,7 +1667,7 @@ class UiHandler(BaseHTTPRequestHandler):
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"ok": False, "error": str(exc)},
             )
-        self._send_json(HTTPStatus.OK, {"ok": True, "frame": assignment})
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
 
     def _handle_submit(self) -> None:
         payload = self._read_json_payload()

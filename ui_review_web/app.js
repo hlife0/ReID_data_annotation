@@ -145,6 +145,8 @@ const MIN_BOX_SIZE = 2;
 const DEFAULT_ANNOTATOR_ID = "annotator_demo";
 const ANNOTATOR_STORAGE_KEY = "ui_review_annotator_id";
 const PROGRESS_TARGET = 4000;
+const PREFETCH_WINDOW = 5;
+const IMAGE_CACHE_LIMIT = 12;
 
 const state = {
   frame: null,
@@ -164,6 +166,8 @@ const state = {
   hintVars: {},
   initialFrameRequested: false,
   imageRequestId: 0,
+  imageCache: new Map(),
+  inflightImageFetches: new Map(),
   history: [],
   editing: false,
   editingAnnotationId: "",
@@ -363,6 +367,83 @@ function round3(num) {
   return Math.round(num * 1000) / 1000;
 }
 
+function frameCacheKey(videoStem, frameIndex) {
+  return `${videoStem}::${frameIndex}`;
+}
+
+function touchCachedImage(key) {
+  const cached = state.imageCache.get(key);
+  if (!cached) {
+    return null;
+  }
+  state.imageCache.delete(key);
+  state.imageCache.set(key, cached);
+  return cached;
+}
+
+function storeCachedImage(key, record) {
+  const existing = state.imageCache.get(key);
+  if (existing && existing.blobUrl && existing.blobUrl !== record.blobUrl) {
+    URL.revokeObjectURL(existing.blobUrl);
+  }
+  if (state.imageCache.has(key)) {
+    state.imageCache.delete(key);
+  }
+  state.imageCache.set(key, record);
+
+  while (state.imageCache.size > IMAGE_CACHE_LIMIT) {
+    const oldestKey = state.imageCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    const oldest = state.imageCache.get(oldestKey);
+    state.imageCache.delete(oldestKey);
+    if (oldest && oldest.blobUrl) {
+      URL.revokeObjectURL(oldest.blobUrl);
+    }
+  }
+}
+
+async function prefetchFrameImage(frame) {
+  if (!frame || !frame.image_url) {
+    return null;
+  }
+  const key = frameCacheKey(frame.video_stem, frame.frame_index);
+  const cached = touchCachedImage(key);
+  if (cached) {
+    return cached;
+  }
+  if (state.inflightImageFetches.has(key)) {
+    return state.inflightImageFetches.get(key);
+  }
+
+  const promise = fetch(frame.image_url, { cache: "no-store" })
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`Prefetch failed (${res.status})`);
+      }
+      return res.blob();
+    })
+    .then((blob) => {
+      const record = { blobUrl: URL.createObjectURL(blob), fetchedAt: Date.now() };
+      storeCachedImage(key, record);
+      return record;
+    })
+    .finally(() => {
+      state.inflightImageFetches.delete(key);
+    });
+
+  state.inflightImageFetches.set(key, promise);
+  return promise;
+}
+
+function schedulePrefetch(frames) {
+  const candidates = Array.isArray(frames) ? frames.slice(0, PREFETCH_WINDOW) : [];
+  for (const frame of candidates) {
+    prefetchFrameImage(frame).catch(() => {});
+  }
+}
+
 function cloneBbox(b) {
   return b ? { x: b.x, y: b.y, w: b.w, h: b.h } : null;
 }
@@ -479,7 +560,7 @@ function applyFrame(frame, options = {}) {
     applyRecommendations(frame.recommendations);
   }
   syncHeader();
-  loadImage(frame.image_url);
+  loadFrameImage(frame);
   if (options.isAssignment) {
     state.lastAssignmentFrame = frame;
   }
@@ -545,9 +626,8 @@ function applyRecommendations(recommendations) {
   }
 }
 
-function loadImage(url) {
+function renderImageSource(src, requestId) {
   const img = new Image();
-  const requestId = ++state.imageRequestId;
   img.decoding = "async";
   img.onload = () => {
     if (requestId !== state.imageRequestId) {
@@ -566,7 +646,18 @@ function loadImage(url) {
     setHintByKey("hint_load_fail");
     showToastKey("toast_frame_load_failed", {}, true);
   };
-  img.src = `${url}&_ts=${Date.now()}`;
+  img.src = src;
+}
+
+function loadFrameImage(frame) {
+  const requestId = ++state.imageRequestId;
+  const key = frameCacheKey(frame.video_stem, frame.frame_index);
+  const cached = touchCachedImage(key);
+  if (cached && cached.blobUrl) {
+    renderImageSource(cached.blobUrl, requestId);
+    return;
+  }
+  renderImageSource(`${frame.image_url}&_ts=${Date.now()}`, requestId);
 }
 
 function trackColor(trackId) {
@@ -946,6 +1037,7 @@ async function requestNextFrame() {
     const payload = await postJson("/api/next_frame", { annotator_id: annotatorId() });
     exitEditMode();
     applyFrame(payload.frame, { isAssignment: true });
+    schedulePrefetch(payload.prefetch_frames);
     showToastKey("toast_loaded_next");
   } catch (err) {
     showToast(err.message, true);
@@ -972,6 +1064,7 @@ async function submitAndNext() {
     const result = await postJson("/api/submit", payload);
     exitEditMode();
     applyFrame(result.next_frame, { isAssignment: true });
+    schedulePrefetch(result.prefetch_frames);
     loadHistory();
     showToastKey("toast_submitted", {
       video: result.submitted.video_stem,
