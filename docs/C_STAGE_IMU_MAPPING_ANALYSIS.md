@@ -1,6 +1,6 @@
 # C 阶段结果分析：双 IMU 静止/运动比值与人物对应辅助
 
-- 分析批次：`batch_20260306_v02`
+- 分析批次：`annotation/batch_20260306_v02`
 - 文档生成时间：`2026-03-06 03:52:38`
 - 数据来源：`batch_20260306_v02/imu_mapping/*.imu_ratio_rank.csv` 与 `*.imu_mapping_summary.json`
 
@@ -19,7 +19,7 @@
 - 每个视频必须有：
   - `video/<video_stem>_frame_timestamps_retimed.csv`
   - `imu/*.csv` 且数量必须恰好 2
-- 不满足条件时标记 `blocked`，并写入 `batch_xxx/logs/errors.log`（不静默跳过）。
+- 不满足条件时标记 `blocked`，并写入 `annotation/batch_xxx/logs/errors.log`（不静默跳过）。
 
 ### 2.2 通道与预处理（C1）
 - 使用 IMU 通道：`加速度X/Y/Z`、`角速度X/Y/Z`、`epoch_ms`。
@@ -49,12 +49,12 @@
   - `video_stem, frame_index, timestamp_ms, imu_id_a, imu_id_b, static_coef_a, static_coef_b, coef_type, coef_a, coef_b, k_t, m_t, rank_m_desc`
 - 排序规则：先按 `m_t` 降序，再按 `timestamp_ms` 升序；`rank_m_desc` 从 1 开始连续编号。
 - 每视频输出 summary JSON，记录算法公式、参数、异常处理、统计和建议回放区间。
-- 额外使用 `test_imu_mapping_outputs.py` 做字段、公式、排序、rank 连续性校验。
+- 额外使用 `codex/test_imu_mapping_outputs.py` 做字段、公式、排序、rank 连续性校验。
 
 ## 3. 本次运行结果总览
 
-- 运行命令：` .venv/bin/python ./process_imu_mapping_batch.py --required-root ./data/required --output-root . --coef-type motion --smoothing-window 5 --max-align-gap-ms 250 `
-- 输出批次：`batch_20260306_v02`
+- 运行命令：` .venv/bin/python ./codex/process_imu_mapping_batch.py --required-root ./data/required --output-root ./annotation --coef-type motion --smoothing-window 5 --max-align-gap-ms 250 `
+- 输出批次：`annotation/batch_20260306_v02`
 - 处理视频数：4
 - 成功：4，blocked：0，failed：0
 - 校验结果：`Validation PASS: csv_files=4, summary_files=4`

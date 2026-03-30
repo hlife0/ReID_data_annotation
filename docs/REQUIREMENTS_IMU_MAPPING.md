@@ -34,7 +34,7 @@
 写入当前批次目录：
 
 ```text
-./batch_<YYYYMMDD>_<vNN>/
+./annotation/batch_<YYYYMMDD>_<vNN>/
 ├── imu_mapping/
 │   ├── <video_stem>.imu_ratio_rank.csv
 │   └── <video_stem>.imu_mapping_summary.json

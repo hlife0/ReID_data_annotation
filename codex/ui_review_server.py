@@ -20,6 +20,8 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 TARGET_VIDEO_STEMS = [
     "20260211_171423",
     "20260211_171724",
@@ -71,6 +73,10 @@ def _now_iso() -> str:
 
 def _safe_float(value: Any) -> float:
     return float(f"{float(value):.3f}")
+
+
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
 @dataclass(frozen=True)
@@ -961,7 +967,7 @@ class AnnotationState:
                 video_path = (
                     raw_video_path
                     if raw_video_path.is_absolute()
-                    else (Path.cwd() / raw_video_path)
+                    else (REPO_ROOT / raw_video_path)
                 )
                 if not video_path.exists():
                     raise FileNotFoundError(f"video path missing for {stem}: {video_path}")
@@ -975,7 +981,7 @@ class AnnotationState:
         all_records: List[FrameRecord] = []
         for stem in TARGET_VIDEO_STEMS:
             ts_path = (
-                Path.cwd()
+                REPO_ROOT
                 / "data"
                 / "required"
                 / stem
@@ -1803,7 +1809,7 @@ def parse_args() -> argparse.Namespace:
         "--batch-dir",
         type=Path,
         required=True,
-        help="Batch directory path, e.g. ./batch_20260305_v03",
+        help="Batch directory path, e.g. ./annotation/batch_20260305_v03",
     )
     parser.add_argument(
         "--host",
@@ -1865,7 +1871,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    batch_dir = args.batch_dir.resolve()
+    batch_dir = resolve_repo_path(args.batch_dir)
     if not batch_dir.exists():
         raise SystemExit(f"batch directory does not exist: {batch_dir}")
 

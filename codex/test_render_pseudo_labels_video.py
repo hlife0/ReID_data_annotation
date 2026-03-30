@@ -10,6 +10,8 @@ from typing import Dict, List, Tuple
 
 import cv2
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -35,6 +37,10 @@ def parse_args() -> argparse.Namespace:
         help="How bbox_x,bbox_y,bbox_w,bbox_h should be interpreted",
     )
     return parser.parse_args()
+
+
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
 def color_for_track(track_id: int) -> Tuple[int, int, int]:
@@ -102,8 +108,8 @@ def to_xyxy(
 
 def main() -> None:
     args = parse_args()
-    workspace = Path.cwd()
-    batch_dir = args.batch_dir.resolve()
+    workspace = REPO_ROOT
+    batch_dir = resolve_repo_path(args.batch_dir)
 
     manifest_path = batch_dir / "manifests" / "annotation_tasks.csv"
     pseudo_csv_path = batch_dir / "pseudo_labels" / f"{args.video_stem}.auto.csv"

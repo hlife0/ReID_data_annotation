@@ -6,6 +6,7 @@ __pycache__/
 # Large data and generated artifacts
 data
 batch_*/
+annotation/batch_*/
 *.pt
 
 # Runtime/config secrets

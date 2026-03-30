@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 TARGET_VIDEO_STEMS = [
     "20260211_171423",
     "20260211_171724",
@@ -22,6 +24,10 @@ TARGET_VIDEO_STEMS = [
 
 def _now_human() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
 class RunLogger:
@@ -432,7 +438,7 @@ class AdminHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Admin panel server for UI review database")
-    parser.add_argument("--batch-dir", type=Path, required=True, help="Batch directory path")
+    parser.add_argument("--batch-dir", type=Path, required=True, help="Batch directory path, e.g. ./annotation/batch_20260305_v03")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host")
     parser.add_argument("--port", type=int, default=10087, help="Bind port")
     return parser.parse_args()
@@ -440,7 +446,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    batch_dir = args.batch_dir.resolve()
+    batch_dir = resolve_repo_path(args.batch_dir)
     if not batch_dir.exists():
         raise SystemExit(f"batch directory does not exist: {batch_dir}")
 

@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import List
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 REQUIRED_COLUMNS = [
     "video_stem",
     "frame_index",
@@ -38,10 +40,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--root",
         type=Path,
-        default=Path("."),
-        help="Root directory containing batch_*_vNN",
+        default=REPO_ROOT / "annotation",
+        help="Root directory containing annotation/batch_*_vNN",
     )
     return parser.parse_args()
+
+
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
 def find_latest_batch(root: Path) -> Path:
@@ -133,6 +139,9 @@ def validate_summary(summary_path: Path) -> List[str]:
 
 def main() -> None:
     args = parse_args()
+    if args.batch_dir is not None:
+        args.batch_dir = resolve_repo_path(args.batch_dir)
+    args.root = resolve_repo_path(args.root)
     batch_dir = args.batch_dir if args.batch_dir is not None else find_latest_batch(args.root)
     imu_mapping_dir = batch_dir / "imu_mapping"
     if not imu_mapping_dir.exists():

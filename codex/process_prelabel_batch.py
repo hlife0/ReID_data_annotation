@@ -14,6 +14,8 @@ from typing import Dict, Iterable, List, Tuple
 
 import cv2
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 TARGET_VIDEO_STEMS = [
     "20260211_171423",
     "20260211_172522",
@@ -84,6 +86,10 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run A0/A1/A2 prelabel pipeline for required videos"
@@ -91,14 +97,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--required-root",
         type=Path,
-        default=Path("./data/required"),
-        help="Input required data root (must be symlink path under current workspace)",
+        default=REPO_ROOT / "data" / "required",
+        help="Input required data root (default: <repo>/data/required)",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("."),
-        help="Batch output root (current directory by default)",
+        default=REPO_ROOT / "annotation",
+        help="Batch output root (default: <repo>/annotation)",
     )
     parser.add_argument(
         "--batch-date",
@@ -158,7 +164,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--yolo-config-dir",
         type=Path,
-        default=Path("./.yolo_cfg"),
+        default=REPO_ROOT / "yolo_cfg",
         help="Writable config/cache directory for Ultralytics",
     )
     parser.add_argument(
@@ -948,6 +954,12 @@ def main() -> None:
     args = parse_args()
     if args.frame_stride < 1:
         raise SystemExit("--frame-stride must be >= 1")
+    args.required_root = resolve_repo_path(args.required_root)
+    args.output_root = resolve_repo_path(args.output_root)
+    args.yolo_config_dir = resolve_repo_path(args.yolo_config_dir)
+    args.bytetrack_root = resolve_repo_path(args.bytetrack_root)
+    if args.bytetrack_python is not None:
+        args.bytetrack_python = resolve_repo_path(args.bytetrack_python)
 
     batch_dir = find_batch_dir(args.output_root, args.batch_date, args.batch_version)
     manifests_dir = batch_dir / "manifests"

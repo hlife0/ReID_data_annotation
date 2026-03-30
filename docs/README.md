@@ -11,10 +11,10 @@
 
 ## 当前状态（截至 2026-03-15）
 
-- A 阶段：ByteTrack 预标注已跑通，最新批次 `batch_20260314_v05`，已生成 `pseudo_labels/*.auto.csv` 与带框视频 `pseudo_labels/videos/*.boxed.mp4`。
-- B 阶段：UI 标注与后台服务可用；历史标注数据在 `batch_20260305_v03`，最新批次推荐使用 `batch_20260314_v05`。
-- C 阶段：IMU 比值分析产物在 `batch_20260306_v02/imu_mapping/`，分析汇总见 `C_STAGE_IMU_MAPPING_ANALYSIS.md`。
-- D 阶段：自动推荐已实现（`ui_review_server.py` + `ui_review_web/app.js`），文档见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
+- A 阶段：ByteTrack 预标注已跑通，最新批次 `annotation/batch_20260314_v05`，已生成 `pseudo_labels/*.auto.csv` 与带框视频 `pseudo_labels/videos/*.boxed.mp4`。
+- B 阶段：UI 标注与后台服务可用；历史标注数据在 `annotation/batch_20260305_v03`，最新批次推荐使用 `annotation/batch_20260314_v05`。
+- C 阶段：IMU 比值分析产物在 `annotation/batch_20260306_v02/imu_mapping/`，分析汇总见 `C_STAGE_IMU_MAPPING_ANALYSIS.md`。
+- D 阶段：自动推荐已实现（`codex/ui_review_server.py` + `codex/ui_review_web/app.js`），文档见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
 
 ---
 
@@ -24,9 +24,9 @@
 
 ---
 
-## 1. 根目录脚本规范
+## 1. `codex/` 目录脚本规范
 
-根目录脚本统一前缀：
+`codex/` 下脚本统一前缀：
 
 - `process_xxx.py`：批处理/主流程
 - `test_xxx.py`：测试与辅助验证
@@ -34,12 +34,12 @@
 
 当前脚本：
 
-- `process_prelabel_batch.py`
-- `process_imu_mapping_batch.py`
-- `test_render_pseudo_labels_video.py`
-- `test_imu_mapping_outputs.py`
-- `ui_review_server.py`
-- `ui_admin_server.py`
+- `codex/process_prelabel_batch.py`
+- `codex/process_imu_mapping_batch.py`
+- `codex/test_render_pseudo_labels_video.py`
+- `codex/test_imu_mapping_outputs.py`
+- `codex/ui_review_server.py`
+- `codex/ui_admin_server.py`
 
 ---
 
@@ -48,18 +48,18 @@
 ```text
 .
 ├── data -> /data/hrli/data_annotation/data
-├── process_prelabel_batch.py
-├── process_imu_mapping_batch.py
-├── test_render_pseudo_labels_video.py
-├── test_imu_mapping_outputs.py
-├── ui_review_server.py
-├── ui_admin_server.py
-├── ui_review_web/
-├── ui_admin_web/
-├── REQUIREMENTS_PRELABEL.md
-├── REQUIREMENTS_UI_REVIEW.md
-├── REQUIREMENTS_IMU_MAPPING.md
-└── batch_<YYYYMMDD>_<vNN>/
+├── docs/
+├── codex/
+│   ├── process_prelabel_batch.py
+│   ├── process_imu_mapping_batch.py
+│   ├── test_render_pseudo_labels_video.py
+│   ├── test_imu_mapping_outputs.py
+│   ├── ui_review_server.py
+│   ├── ui_admin_server.py
+│   ├── ui_review_web/
+│   └── ui_admin_web/
+└── annotation/
+    └── batch_<YYYYMMDD>_<vNN>/
 ```
 
 ---
@@ -76,9 +76,9 @@
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./process_prelabel_batch.py \
+.venv/bin/python ./codex/process_prelabel_batch.py \
   --required-root ./data/required \
-  --output-root . \
+  --output-root ./annotation \
   --backend ultralytics \
   --device cuda:3 \
   --model yolo11x.pt \
@@ -89,9 +89,9 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./process_prelabel_batch.py \
+.venv/bin/python ./codex/process_prelabel_batch.py \
   --required-root ./data/required \
-  --output-root . \
+  --output-root ./annotation \
   --backend bytetrack \
   --bytetrack-root /data/hrli/ByteTrack \
   --bytetrack-exp-file exps/example/mot/yolox_x_mix_det.py \
@@ -105,7 +105,7 @@ cd /home/hrli/data_annotation
 只抽任务（A0/A1，不跑推理）：
 
 ```bash
-.venv/bin/python ./process_prelabel_batch.py --only-task-extraction
+.venv/bin/python ./codex/process_prelabel_batch.py --only-task-extraction
 ```
 
 ---
@@ -118,8 +118,8 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./ui_review_server.py \
-  --batch-dir ./batch_20260314_v05 \
+.venv/bin/python ./codex/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260314_v05 \
   --frame-cache-disk \
   --frame-cache-prewarm-only
 ```
@@ -128,8 +128,8 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./ui_review_server.py \
-  --batch-dir ./batch_20260314_v05 \
+.venv/bin/python ./codex/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260314_v05 \
   --port 10086 \
   --frame-cache-disk \
   --frame-cache-max 512
@@ -141,7 +141,7 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./ui_admin_server.py --batch-dir ./batch_20260314_v05 --port 10087
+.venv/bin/python ./codex/ui_admin_server.py --batch-dir ./annotation/batch_20260314_v05 --port 10087
 ```
 
 访问：`http://localhost:10087`
@@ -154,7 +154,7 @@ cd /home/hrli/data_annotation
 - 提交后写库并自动分配下一帧
 - 支持基于历史 `track_id` 的自动推荐（D 阶段）
 - 左侧历史栏：按时间倒序展示当前标注员记录，可折叠并进入编辑模式修订
-- Header 进度条：显示当前标注员完成度（目标 3000）
+- Header 进度条：显示当前标注员完成度（目标 4000）
 
 ---
 
@@ -164,15 +164,15 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./test_render_pseudo_labels_video.py \
-  --batch-dir ./batch_20260305_v03 \
+.venv/bin/python ./codex/test_render_pseudo_labels_video.py \
+  --batch-dir ./annotation/batch_20260305_v03 \
   --video-stem 20260211_171423 \
   --bbox-format coco_xywh
 ```
 
 输出：
 
-- `batch_xxx/pseudo_labels/videos/<video_stem>.boxed.mp4`
+- `annotation/batch_xxx/pseudo_labels/videos/<video_stem>.boxed.mp4`
 
 ---
 
@@ -190,9 +190,9 @@ cd /home/hrli/data_annotation
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./process_imu_mapping_batch.py \
+.venv/bin/python ./codex/process_imu_mapping_batch.py \
   --required-root ./data/required \
-  --output-root . \
+  --output-root ./annotation \
   --coef-type motion \
   --smoothing-window 5 \
   --max-align-gap-ms 250
@@ -201,23 +201,23 @@ cd /home/hrli/data_annotation
 指定已有批次目录输出：
 
 ```bash
-.venv/bin/python ./process_imu_mapping_batch.py \
+.venv/bin/python ./codex/process_imu_mapping_batch.py \
   --required-root ./data/required \
-  --batch-dir ./batch_20260305_v03
+  --batch-dir ./annotation/batch_20260305_v03
 ```
 
 输出文件：
 
-- `batch_xxx/imu_mapping/<video_stem>.imu_ratio_rank.csv`
-- `batch_xxx/imu_mapping/<video_stem>.imu_mapping_summary.json`
-- `batch_xxx/logs/run.log`
-- `batch_xxx/logs/errors.log`
+- `annotation/batch_xxx/imu_mapping/<video_stem>.imu_ratio_rank.csv`
+- `annotation/batch_xxx/imu_mapping/<video_stem>.imu_mapping_summary.json`
+- `annotation/batch_xxx/logs/run.log`
+- `annotation/batch_xxx/logs/errors.log`
 
 ### 6.2 C 阶段产物校验
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./test_imu_mapping_outputs.py --batch-dir ./batch_20260305_v03
+.venv/bin/python ./codex/test_imu_mapping_outputs.py --batch-dir ./annotation/batch_20260305_v03
 ```
 
 ---

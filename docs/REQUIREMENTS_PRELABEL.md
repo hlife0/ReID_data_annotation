@@ -14,11 +14,11 @@
 
 ## 2. 当前实现入口
 
-主脚本：`./process_prelabel_batch.py`
+主脚本：`./codex/process_prelabel_batch.py`
 
 可选测试脚本（仅用于可视化核查，不是主流程必需）：
 
-- `./test_render_pseudo_labels_video.py`
+- `./codex/test_render_pseudo_labels_video.py`
 
 ---
 
@@ -42,12 +42,12 @@
 
 批次目录命名：
 
-- `batch_<YYYYMMDD>_<vNN>`，例如 `batch_20260305_v03`
+- `annotation/batch_<YYYYMMDD>_<vNN>`，例如 `annotation/batch_20260305_v03`
 
 主流程必需产物：
 
 ```text
-./batch_<YYYYMMDD>_<vNN>/
+./annotation/batch_<YYYYMMDD>_<vNN>/
 ├── manifests/
 │   └── annotation_tasks.csv
 ├── pseudo_labels/
@@ -60,7 +60,7 @@
 可选测试产物（仅运行测试渲染脚本时出现）：
 
 ```text
-./batch_<YYYYMMDD>_<vNN>/
+./annotation/batch_<YYYYMMDD>_<vNN>/
 └── pseudo_labels/
     └── videos/
         └── <video_stem>.boxed.mp4
@@ -155,9 +155,9 @@
 ### 9.1 主流程（默认 ultralytics）
 
 ```bash
-.venv/bin/python ./process_prelabel_batch.py \
+.venv/bin/python ./codex/process_prelabel_batch.py \
   --required-root ./data/required \
-  --output-root . \
+  --output-root ./annotation \
   --backend ultralytics \
   --device cuda:3 \
   --model yolo11x.pt \
@@ -167,14 +167,14 @@
 ### 9.2 只做任务抽取（A0/A1）
 
 ```bash
-.venv/bin/python ./process_prelabel_batch.py --only-task-extraction
+.venv/bin/python ./codex/process_prelabel_batch.py --only-task-extraction
 ```
 
 ### 9.3 可选：单视频渲染检测框（测试）
 
 ```bash
-.venv/bin/python ./test_render_pseudo_labels_video.py \
-  --batch-dir ./batch_20260305_v03 \
+.venv/bin/python ./codex/test_render_pseudo_labels_video.py \
+  --batch-dir ./annotation/batch_20260305_v03 \
   --video-stem 20260211_171423 \
   --bbox-format coco_xywh
 ```

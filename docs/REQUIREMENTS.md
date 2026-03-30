@@ -3,13 +3,13 @@
 本项目需求已拆分为四份“实现对齐版”文档：
 
 1. 预标注批处理规范  
-   `~/data_annotation/REQUIREMENTS_PRELABEL.md`
+   `~/data_annotation/docs/REQUIREMENTS_PRELABEL.md`
 2. UI 双人标注与复标分发规范  
-   `~/data_annotation/REQUIREMENTS_UI_REVIEW.md`
+   `~/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md`
 3. 双 IMU 静止/运动比值分析与人物对应辅助规范  
-   `~/data_annotation/REQUIREMENTS_IMU_MAPPING.md`
+   `~/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md`
 4. 基于历史 AI Track ID 的自动推荐规范  
-   `~/data_annotation/REQUIREMENTS_TRACK_RECOMMENDATION.md`
+   `~/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md`
 
 推荐阅读顺序：
 

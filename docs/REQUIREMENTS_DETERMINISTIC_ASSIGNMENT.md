@@ -381,7 +381,7 @@
 
 ### 10.1 服务端
 
-主要文件：`ui_review_server.py`
+主要文件：`codex/ui_review_server.py`
 
 预计改动点：
 
@@ -394,7 +394,7 @@
 
 ### 10.2 前端
 
-主要文件：`ui_review_web/app.js`
+主要文件：`codex/ui_review_web/app.js`
 
 预计改动点：
 
@@ -406,7 +406,7 @@
 
 ### 10.3 无需修改的部分
 
-1. `ui_admin_server.py`
+1. `codex/ui_admin_server.py`
 2. 管理后台前端
 3. SQLite schema
 4. 导出 CSV/JSONL 的字段结构

@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 CSV_COLUMNS = [
     "video_stem",
     "frame_index",
@@ -78,6 +80,10 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def resolve_repo_path(path: Path) -> Path:
+    return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run C stage: dual-IMU ratio analysis for person-IMU mapping assistance"
@@ -85,14 +91,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--required-root",
         type=Path,
-        default=Path("./data/required"),
+        default=REPO_ROOT / "data" / "required",
         help="Input required data root",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("."),
-        help="Root directory used to create batch_<YYYYMMDD>_vNN",
+        default=REPO_ROOT / "annotation",
+        help="Root directory used to create annotation/batch_<YYYYMMDD>_vNN",
     )
     parser.add_argument(
         "--batch-dir",
@@ -683,6 +689,10 @@ def main() -> None:
         raise SystemExit("--max-align-gap-ms must be > 0")
     if args.min_coef <= 0:
         raise SystemExit("--min-coef must be > 0")
+    args.required_root = resolve_repo_path(args.required_root)
+    args.output_root = resolve_repo_path(args.output_root)
+    if args.batch_dir is not None:
+        args.batch_dir = resolve_repo_path(args.batch_dir)
 
     batch_dir = (
         args.batch_dir

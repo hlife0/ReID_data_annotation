@@ -15,8 +15,8 @@
 
 ## 2. 当前实现入口
 
-- 标注服务：`./ui_review_server.py`（默认端口 `10086`）
-- 管理面板：`./ui_admin_server.py`（默认端口 `10087`）
+- 标注服务：`./codex/ui_review_server.py`（默认端口 `10086`）
+- 管理面板：`./codex/ui_admin_server.py`（默认端口 `10087`）
 
 ---
 
@@ -26,7 +26,7 @@
 
 - `./data/required/<video_stem>/video/<video_stem>_retimed.mp4`
 - `./data/required/<video_stem>/video/<video_stem>_frame_timestamps_retimed.csv`
-- `./batch_<YYYYMMDD>_<vNN>/pseudo_labels/<video_stem>.auto.csv`
+- `./annotation/batch_<YYYYMMDD>_<vNN>/pseudo_labels/<video_stem>.auto.csv`
 
 路径约束：
 
@@ -39,7 +39,7 @@
 ## 4. 批次目录与产物
 
 ```text
-./batch_<YYYYMMDD>_<vNN>/
+./annotation/batch_<YYYYMMDD>_<vNN>/
 ├── ui_tasks/
 │   ├── frame_pool.csv
 │   ├── frame_annotation_counts.csv
@@ -125,7 +125,7 @@
 
 在 Header 中显示当前标注员进度条：
 
-1. 进度 = 当前标注员提交数 / 目标数（目标数默认 3000）。
+1. 进度 = 当前标注员提交数 / 目标数（目标数默认 4000）。
 2. 切换标注员 ID 后自动刷新进度。
 
 ---
@@ -209,19 +209,19 @@
 ### 10.1 初始化（可选，清空并重建）
 
 ```bash
-.venv/bin/python ./ui_review_server.py --batch-dir ./batch_20260305_v03 --reset-storage --init-only
+.venv/bin/python ./codex/ui_review_server.py --batch-dir ./annotation/batch_20260305_v03 --reset-storage --init-only
 ```
 
 ### 10.2 启动标注服务
 
 ```bash
-.venv/bin/python ./ui_review_server.py --batch-dir ./batch_20260305_v03 --port 10086
+.venv/bin/python ./codex/ui_review_server.py --batch-dir ./annotation/batch_20260305_v03 --port 10086
 ```
 
 ### 10.3 启动管理面板
 
 ```bash
-.venv/bin/python ./ui_admin_server.py --batch-dir ./batch_20260305_v03 --port 10087
+.venv/bin/python ./codex/ui_admin_server.py --batch-dir ./annotation/batch_20260305_v03 --port 10087
 ```
 
 ### 10.4 性能缓存（推荐）
@@ -229,8 +229,8 @@
 离线预热（先跑完缓存再开服务，避免标注时抢 CPU）：
 
 ```bash
-.venv/bin/python ./ui_review_server.py \
-  --batch-dir ./batch_20260305_v03 \
+.venv/bin/python ./codex/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260305_v03 \
   --frame-cache-disk \
   --frame-cache-prewarm-only
 ```
@@ -238,8 +238,8 @@
 启动服务（启用缓存）：
 
 ```bash
-.venv/bin/python ./ui_review_server.py \
-  --batch-dir ./batch_20260305_v03 \
+.venv/bin/python ./codex/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260305_v03 \
   --port 10086 \
   --frame-cache-disk \
   --frame-cache-max 512
