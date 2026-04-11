@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .venv/
+.codex
 
 # Large data and generated artifacts
 data

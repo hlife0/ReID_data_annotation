@@ -1,6 +1,6 @@
 # 标注需求入口说明
 
-本项目需求已拆分为四份“实现对齐版”文档：
+本项目需求已拆分为七份主文档 + 一份补充设计文档：
 
 1. 预标注批处理规范  
    `~/data_annotation/docs/REQUIREMENTS_PRELABEL.md`
@@ -10,6 +10,12 @@
    `~/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md`
 4. 基于历史 AI Track ID 的自动推荐规范  
    `~/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md`
+5. 标注结果分析与 Dice 折线图规范  
+   `~/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md`
+6. 标注结果复审 UI 规范  
+   `~/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
+7. 最终 Annotation 融合导出规范  
+   `~/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md`
 
 推荐阅读顺序：
 
@@ -18,6 +24,9 @@
 3. `REQUIREMENTS_UI_REVIEW.md`
 4. `REQUIREMENTS_IMU_MAPPING.md`
 5. `REQUIREMENTS_TRACK_RECOMMENDATION.md`
+6. `REQUIREMENTS_ANNOTATION_ANALYSIS.md`
+7. `REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
+8. `REQUIREMENTS_FINAL_ANNOTATION.md`
 
 流程顺序：
 
@@ -25,3 +34,6 @@
 2. 再执行 UI 标注阶段（B）
 3. 最后执行 IMU 映射分析阶段（C）
 4. D 阶段作为 B 阶段增强功能，独立开关
+5. F 阶段用于对 B 阶段产出的多标注结果做离线一致性分析
+6. G 阶段用于对多标注结果做人工复审与最终裁决
+7. H 阶段用于融合多标注结果并导出最终 annotation

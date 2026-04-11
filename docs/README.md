@@ -1,11 +1,12 @@
 # Data Annotation Pipeline
 
-本项目包含三阶段流程 + D 阶段增强：
+本项目包含三阶段流程 + D/F 阶段增强：
 
 1. **预标注批处理**（A 阶段）
 2. **UI 双人标注与复标分发**（B 阶段）
 3. **双 IMU 静止/运动比值分析与人物对应辅助**（C 阶段）
 4. **基于历史 Track ID 的自动推荐**（D 阶段）
+5. **标注结果一致性分析与 Dice 折线图**（F 阶段）
 
 ---
 
@@ -15,6 +16,7 @@
 - B 阶段：UI 标注与后台服务可用；历史标注数据在 `annotation/batch_20260305_v03`，最新批次推荐使用 `annotation/batch_20260314_v05`。
 - C 阶段：IMU 比值分析产物在 `annotation/batch_20260306_v02/imu_mapping/`，分析汇总见 `C_STAGE_IMU_MAPPING_ANALYSIS.md`。
 - D 阶段：自动推荐已实现（`codex/ui_review_server.py` + `codex/ui_review_web/app.js`），文档见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`。
+- F 阶段：标注结果分析已实现（`codex/process_annotation_analysis.py`），可生成逐帧 Dice CSV、P1/P2 折线图与 summary。
 
 ---
 
@@ -40,6 +42,7 @@
 - `codex/test_imu_mapping_outputs.py`
 - `codex/ui_review_server.py`
 - `codex/ui_admin_server.py`
+- `codex/process_annotation_analysis.py`
 
 ---
 
@@ -56,6 +59,7 @@
 │   ├── test_imu_mapping_outputs.py
 │   ├── ui_review_server.py
 │   ├── ui_admin_server.py
+│   ├── process_annotation_analysis.py
 │   ├── ui_review_web/
 │   └── ui_admin_web/
 └── annotation/
@@ -213,12 +217,23 @@ cd /home/hrli/data_annotation
 - `annotation/batch_xxx/logs/run.log`
 - `annotation/batch_xxx/logs/errors.log`
 
-### 6.2 C 阶段产物校验
+### 6.3 F 阶段：标注结果分析
+
+运行示例：
 
 ```bash
 cd /home/hrli/data_annotation
-.venv/bin/python ./codex/test_imu_mapping_outputs.py --batch-dir ./annotation/batch_20260305_v03
+.venv/bin/python ./codex/process_annotation_analysis.py --batch-dir ./annotation/batch_20260314_v05
 ```
+
+输出文件：
+
+- `annotation/batch_xxx/annotation_analysis/<video_stem>.dice_timeseries.csv`
+- `annotation/batch_xxx/annotation_analysis/<video_stem>.p1.dice.png`
+- `annotation/batch_xxx/annotation_analysis/<video_stem>.p2.dice.png`
+- `annotation/batch_xxx/annotation_analysis/<video_stem>.dice_summary.json`
+- `annotation/batch_xxx/annotation_analysis/all_videos.dice_hist.png`
+- `annotation/batch_xxx/annotation_analysis/all_videos.rework_threshold.png`
 
 ---
 
@@ -228,4 +243,7 @@ cd /home/hrli/data_annotation
 - UI 规范：`REQUIREMENTS_UI_REVIEW.md`
 - IMU 映射规范：`REQUIREMENTS_IMU_MAPPING.md`
 - 自动推荐规范：`REQUIREMENTS_TRACK_RECOMMENDATION.md`
+- 标注结果分析规范：`REQUIREMENTS_ANNOTATION_ANALYSIS.md`
+- 标注结果复审 UI 规范：`REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
+- 最终 Annotation 融合导出规范：`REQUIREMENTS_FINAL_ANNOTATION.md`
 - 入口说明：`REQUIREMENTS.md`

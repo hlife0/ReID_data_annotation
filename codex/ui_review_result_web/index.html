@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>标注结果复审</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell review-shell">
+      <header class="header">
+        <div class="header-title-block">
+          <h1 id="pageTitle">标注结果复审</h1>
+          <p id="pageSubtitle">左右候选结果二选一；必要时进入重新画模式。</p>
+        </div>
+        <div class="header-meta review-meta">
+          <label>
+            <span>复审员 ID</span>
+            <input id="reviewerId" type="text" value="reviewer_demo" />
+          </label>
+          <button id="nextSampleBtn" class="btn subtle">下一个</button>
+          <button id="redrawModeBtn" class="btn">重新画</button>
+          <button id="langToggleBtn" class="btn subtle">EN</button>
+        </div>
+      </header>
+
+      <section class="status-strip review-status">
+        <div><span class="label">视频</span> <span id="videoStem">-</span></div>
+        <div><span class="label">帧号</span> <span id="frameIndex">-</span></div>
+        <div><span class="label">时间戳</span> <span id="timestampMs">-</span></div>
+        <div><span class="label">当前 Dice</span> <span id="candidateDice">-</span></div>
+        <div><span class="label">待复审</span> <span id="pendingCount">-</span></div>
+      </section>
+
+      <main id="compareView" class="compare-grid">
+        <section class="candidate-card left" id="leftCandidateCard">
+          <div class="candidate-head">
+            <h2>左候选</h2>
+            <div class="candidate-meta">
+              <span id="leftAnnotator">-</span>
+              <span id="leftSubmitted">-</span>
+            </div>
+          </div>
+          <button id="acceptLeftBtn" class="candidate-action" type="button">
+            <canvas id="leftCanvas"></canvas>
+          </button>
+          <div class="candidate-detail">
+            <div>P1: <span id="leftP1Source">-</span></div>
+            <div>P2: <span id="leftP2Source">-</span></div>
+          </div>
+        </section>
+
+        <section class="candidate-card right" id="rightCandidateCard">
+          <div class="candidate-head">
+            <h2>右候选</h2>
+            <div class="candidate-meta">
+              <span id="rightAnnotator">-</span>
+              <span id="rightSubmitted">-</span>
+            </div>
+          </div>
+          <button id="acceptRightBtn" class="candidate-action" type="button">
+            <canvas id="rightCanvas"></canvas>
+          </button>
+          <div class="candidate-detail">
+            <div>P1: <span id="rightP1Source">-</span></div>
+            <div>P2: <span id="rightP2Source">-</span></div>
+          </div>
+        </section>
+      </main>
+
+      <section id="redrawView" class="redraw-shell" hidden>
+        <div class="canvas-panel redraw-panel">
+          <div class="canvas-head">
+            <div class="legend">
+              <span class="chip chip-p1">P1</span>
+              <span class="chip chip-p2">P2</span>
+            </div>
+            <div id="canvasHint" class="canvas-hint">点击左右推荐框、不存在或手动画框</div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="frameCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="control-panel redraw-controls">
+          <article class="person-card p1">
+            <h2>P1</h2>
+            <div class="row"><label>来源</label><div id="p1Source" class="source-badge">not_set</div></div>
+            <div class="row">
+              <label>前人推荐</label>
+              <div class="row-actions">
+                <button id="p1UseLeftBtn" class="btn subtle" type="button">采用左侧</button>
+                <button id="p1UseRightBtn" class="btn subtle" type="button">采用右侧</button>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button id="p1DrawBtn" class="btn" type="button">手动画框</button>
+              <button id="p1AbsentBtn" class="btn subtle danger" type="button">不存在</button>
+            </div>
+            <div class="grid4">
+              <label>X <input id="p1X" type="number" step="0.1" /></label>
+              <label>Y <input id="p1Y" type="number" step="0.1" /></label>
+              <label>W <input id="p1W" type="number" step="0.1" /></label>
+              <label>H <input id="p1H" type="number" step="0.1" /></label>
+            </div>
+          </article>
+
+          <article class="person-card p2">
+            <h2>P2</h2>
+            <div class="row"><label>来源</label><div id="p2Source" class="source-badge">not_set</div></div>
+            <div class="row">
+              <label>前人推荐</label>
+              <div class="row-actions">
+                <button id="p2UseLeftBtn" class="btn subtle" type="button">采用左侧</button>
+                <button id="p2UseRightBtn" class="btn subtle" type="button">采用右侧</button>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button id="p2DrawBtn" class="btn" type="button">手动画框</button>
+              <button id="p2AbsentBtn" class="btn subtle danger" type="button">不存在</button>
+            </div>
+            <div class="grid4">
+              <label>X <input id="p2X" type="number" step="0.1" /></label>
+              <label>Y <input id="p2Y" type="number" step="0.1" /></label>
+              <label>W <input id="p2W" type="number" step="0.1" /></label>
+              <label>H <input id="p2H" type="number" step="0.1" /></label>
+            </div>
+          </article>
+
+          <div class="review-actions">
+            <button id="cancelRedrawBtn" class="btn subtle" type="button">取消重画</button>
+            <button id="submitRedrawBtn" class="btn" type="button">提交重画</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
