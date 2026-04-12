@@ -250,6 +250,15 @@ def find_batch_dir(output_root: Path, batch_date: str, fixed_version: int | None
     return output_root / f"batch_{batch_date}_v{latest + 1:02d}"
 
 
+def discover_target_video_stems(required_root: Path) -> List[str]:
+    stems = sorted(
+        child.name
+        for child in required_root.iterdir()
+        if child.is_dir() and (child / "video").exists()
+    ) if required_root.exists() else []
+    return stems or TARGET_VIDEO_STEMS
+
+
 def check_timestamp_csv(path: Path) -> Tuple[bool, str]:
     if not path.exists():
         return False, "missing timestamp csv"
@@ -269,7 +278,9 @@ def check_timestamp_csv(path: Path) -> Tuple[bool, str]:
 def step_a0_input_inspection(required_root: Path, logger: RunLogger) -> List[Task]:
     tasks: List[Task] = []
     logger.info("Step A0 start: input inspection")
-    for priority, stem in enumerate(TARGET_VIDEO_STEMS, start=1):
+    target_stems = discover_target_video_stems(required_root)
+    logger.info(f"A0 discovered {len(target_stems)} target stems under {required_root}")
+    for priority, stem in enumerate(target_stems, start=1):
         video_path = required_root / stem / "video" / f"{stem}_retimed.mp4"
         timestamp_path = required_root / stem / "video" / f"{stem}_frame_timestamps_retimed.csv"
         imu_paths = sorted((required_root / stem / "imu").glob("*.csv"))
@@ -282,8 +293,8 @@ def step_a0_input_inspection(required_root: Path, logger: RunLogger) -> List[Tas
         if not ts_ok:
             reasons.append(ts_reason)
 
-        if len(imu_paths) != 2:
-            reasons.append(f"imu csv count is {len(imu_paths)}, expected 2")
+        if len(imu_paths) < 1:
+            reasons.append("imu csv count is 0, expected at least 1")
 
         status = "todo" if not reasons else "blocked"
         reason_text = "; ".join(reasons)

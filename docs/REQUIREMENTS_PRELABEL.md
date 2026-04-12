@@ -34,7 +34,7 @@
 
 - `./data/required/<video_stem>/video/<video_stem>_retimed.mp4`
 - `./data/required/<video_stem>/video/<video_stem>_frame_timestamps_retimed.csv`
-- `./data/required/<video_stem>/imu/*.csv`（仅用于巡检，不参与预标注）
+- `./data/required/<video_stem>/imu/*.csv`（仅用于巡检，不参与预标注；允许 1 到 N 个）
 
 ---
 
@@ -70,12 +70,9 @@
 
 ## 5. 本批次目标视频
 
-固定目标：
+当前实现默认扫描 `required-root` 下所有包含 `video/` 子目录的 `video_stem` 目录。
 
-- `20260211_171423`
-- `20260211_172522`
-- `20260211_171724`
-- `20260211_172257`
+若 `required-root` 下未发现任何目录，则回退到历史固定目标集。
 
 ---
 
@@ -109,7 +106,7 @@
 
 ### Step A0：输入巡检
 
-- 检查视频、时间戳 CSV、IMU 数量（期望 2）。
+- 检查视频、时间戳 CSV、IMU 数量（期望至少 1）。
 - 不满足条件的视频标记为 `blocked`（写日志）。
 
 ### Step A1：任务清单生成

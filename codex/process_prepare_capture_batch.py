@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from prepare_capture_lib import (
+    active_devices_for_window,
     build_device_summaries,
     build_frame_timestamps,
-    build_pair_overlap_intervals,
+    build_union_intervals,
     choose_best_device_pair_from_summaries,
     clip_video_segment,
     filter_device_csv_to_window,
@@ -89,23 +91,22 @@ def main() -> None:
     )
 
     if args.device_a and args.device_b:
-        pair = choose_best_device_pair_from_summaries(
+        advisory_pair = choose_best_device_pair_from_summaries(
             {args.device_a: summaries[args.device_a], args.device_b: summaries[args.device_b]},
             video_start_ms,
             video_end_ms,
         )
     else:
-        pair = choose_best_device_pair_from_summaries(summaries, video_start_ms, video_end_ms)
+        advisory_pair = choose_best_device_pair_from_summaries(summaries, video_start_ms, video_end_ms)
 
-    overlap_intervals = build_pair_overlap_intervals(
-        summaries=summaries,
-        pair=pair,
-        video_start_ms=video_start_ms,
-        video_end_ms=video_end_ms,
+    session_source_intervals = build_union_intervals(
+        {device_id: summary.intervals for device_id, summary in summaries.items()},
+        window_start_ms=video_start_ms,
+        window_end_ms=video_end_ms,
         merge_gap_ms=args.pair_merge_gap_ms,
     )
     sessions = slice_intervals_to_sessions(
-        intervals=overlap_intervals,
+        intervals=session_source_intervals,
         session_length_ms=args.session_seconds * 1000,
         min_session_ms=args.min_session_seconds * 1000,
         timezone_name=args.timezone,
@@ -117,8 +118,11 @@ def main() -> None:
 
     session_payloads: list[dict[str, object]] = []
     for session in sessions:
-        video_dir = required_root / session.stem / "video"
-        imu_dir = required_root / session.stem / "imu"
+        session_root = required_root / session.stem
+        if session_root.exists():
+            shutil.rmtree(session_root)
+        video_dir = session_root / "video"
+        imu_dir = session_root / "imu"
         video_dir.mkdir(parents=True, exist_ok=True)
         imu_dir.mkdir(parents=True, exist_ok=True)
 
@@ -137,14 +141,20 @@ def main() -> None:
         hardlink_or_copy(out_video, out_video_retimed)
         hardlink_or_copy(out_ts, out_ts_retimed)
 
-        imu_a_out = imu_dir / f"{session.stem}_{pair.device_a}.csv"
-        imu_b_out = imu_dir / f"{session.stem}_{pair.device_b}.csv"
-        imu_a_rows = filter_device_csv_to_window(
-            summaries[pair.device_a].csv_path, imu_a_out, session.start_ms, session.end_ms
+        active_devices = active_devices_for_window(
+            {device_id: summary.intervals for device_id, summary in summaries.items()},
+            start_ms=session.start_ms,
+            end_ms=session.end_ms,
         )
-        imu_b_rows = filter_device_csv_to_window(
-            summaries[pair.device_b].csv_path, imu_b_out, session.start_ms, session.end_ms
-        )
+        imu_rows_by_device: dict[str, int] = {}
+        for device_id in active_devices:
+            imu_out = imu_dir / f"{session.stem}_{device_id}.csv"
+            imu_rows_by_device[device_id] = filter_device_csv_to_window(
+                summaries[device_id].csv_path,
+                imu_out,
+                session.start_ms,
+                session.end_ms,
+            )
 
         session_payloads.append(
             {
@@ -153,10 +163,8 @@ def main() -> None:
                 "end_ms": session.end_ms,
                 "frame_start_index": start_index + 1,
                 "frame_end_index": end_index + 1,
-                "device_a": pair.device_a,
-                "device_b": pair.device_b,
-                "imu_a_rows": imu_a_rows,
-                "imu_b_rows": imu_b_rows,
+                "active_devices": active_devices,
+                "imu_rows_by_device": imu_rows_by_device,
                 "video_path": str(out_video),
                 "timestamp_path": str(out_ts),
             }
@@ -187,8 +195,8 @@ def main() -> None:
             }
             for device_id, summary in summaries.items()
         },
-        "chosen_pair": asdict(pair),
-        "pair_overlap_intervals": overlap_intervals,
+        "advisory_pair": asdict(advisory_pair),
+        "session_source_intervals": session_source_intervals,
         "sessions": session_payloads,
         "required_root": str(required_root),
     }

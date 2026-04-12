@@ -322,6 +322,32 @@ def build_pair_overlap_intervals(
     return merge_intervals(intersect_interval_sets(left, right), merge_gap_ms)
 
 
+def build_union_intervals(
+    device_intervals: dict[str, list[tuple[int, int]]],
+    window_start_ms: int,
+    window_end_ms: int,
+    merge_gap_ms: int,
+) -> list[tuple[int, int]]:
+    collected: list[tuple[int, int]] = []
+    for intervals in device_intervals.values():
+        collected.extend(clip_intervals_to_window(intervals, window_start_ms, window_end_ms))
+    return merge_intervals(collected, merge_gap_ms)
+
+
+def active_devices_for_window(
+    device_intervals: dict[str, list[tuple[int, int]]],
+    start_ms: int,
+    end_ms: int,
+) -> list[str]:
+    active: list[str] = []
+    for device_id in sorted(device_intervals):
+        for interval_start_ms, interval_end_ms in device_intervals[device_id]:
+            if min(interval_end_ms, end_ms) > max(interval_start_ms, start_ms):
+                active.append(device_id)
+                break
+    return active
+
+
 def probe_video(video_path: Path, fallback_fps: float | None = None) -> CaptureVideoInfo:
     if not shutil.which("ffprobe"):
         raise RuntimeError("ffprobe is required")

@@ -4,8 +4,10 @@ from __future__ import annotations
 import unittest
 
 from prepare_capture_lib import (
+    active_devices_for_window,
     build_frame_timestamps,
     build_device_intervals,
+    build_union_intervals,
     choose_best_device_pair,
     intersect_interval_sets,
     merge_intervals,
@@ -58,6 +60,35 @@ class IntersectIntervalSetsTests(unittest.TestCase):
             [(2000, 8000)],
         )
         self.assertEqual(intersection, [(2000, 5000), (7000, 8000)])
+
+
+class BuildUnionIntervalsTests(unittest.TestCase):
+    def test_builds_union_from_all_devices(self) -> None:
+        intervals = build_union_intervals(
+            {
+                "imu_a": [(1000, 4000)],
+                "imu_b": [(3000, 7000)],
+                "imu_c": [(9000, 11000)],
+            },
+            window_start_ms=0,
+            window_end_ms=12000,
+            merge_gap_ms=0,
+        )
+        self.assertEqual(intervals, [(1000, 7000), (9000, 11000)])
+
+
+class ActiveDevicesForWindowTests(unittest.TestCase):
+    def test_collects_all_overlapping_devices_for_window(self) -> None:
+        devices = active_devices_for_window(
+            {
+                "imu_a": [(1000, 4000)],
+                "imu_b": [(3000, 7000)],
+                "imu_c": [(9000, 11000)],
+            },
+            start_ms=3500,
+            end_ms=5000,
+        )
+        self.assertEqual(devices, ["imu_a", "imu_b"])
 
 
 class ChooseBestDevicePairTests(unittest.TestCase):
