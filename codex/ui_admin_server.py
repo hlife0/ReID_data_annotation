@@ -22,6 +22,29 @@ def resolve_repo_path(path: Path) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
+def slot_summary_from_json(slots_json: str) -> str:
+    try:
+        slots = json.loads(slots_json)
+    except Exception:
+        return ""
+    if not isinstance(slots, list):
+        return ""
+    parts: List[str] = []
+    for item in slots:
+        if not isinstance(item, dict):
+            continue
+        slot = str(item.get("slot", "")).strip()
+        source = str(item.get("source", "")).strip()
+        track = str(item.get("ai_track_id", "") or "").strip()
+        if not slot:
+            continue
+        piece = f"{slot.upper()}:{source}"
+        if track:
+            piece += f"({track})"
+        parts.append(piece)
+    return " | ".join(parts)
+
+
 class RunLogger:
     def __init__(self, run_log_path: Path, error_log_path: Path) -> None:
         self.run_log_path = run_log_path
@@ -176,10 +199,7 @@ class AdminState:
                     video_stem,
                     frame_index,
                     submitted_at,
-                    p1_source,
-                    p2_source,
-                    p1_ai_track_id,
-                    p2_ai_track_id
+                    slots_json
                 FROM annotations
                 ORDER BY submitted_at DESC, annotation_id DESC
                 LIMIT 500
@@ -225,10 +245,8 @@ class AdminState:
                 "video_stem": str(r["video_stem"]),
                 "frame_index": int(r["frame_index"]),
                 "submitted_at": str(r["submitted_at"]),
-                "p1_source": str(r["p1_source"]),
-                "p2_source": str(r["p2_source"]),
-                "p1_ai_track_id": str(r["p1_ai_track_id"] or ""),
-                "p2_ai_track_id": str(r["p2_ai_track_id"] or ""),
+                "slots_json": str(r["slots_json"]),
+                "slots_summary": slot_summary_from_json(str(r["slots_json"])),
             }
             for r in recent_rows
         ]
@@ -270,18 +288,7 @@ class AdminState:
                     annotation_id,
                     annotator_id,
                     submitted_at,
-                    p1_bbox_x,
-                    p1_bbox_y,
-                    p1_bbox_w,
-                    p1_bbox_h,
-                    p1_source,
-                    p1_ai_track_id,
-                    p2_bbox_x,
-                    p2_bbox_y,
-                    p2_bbox_w,
-                    p2_bbox_h,
-                    p2_source,
-                    p2_ai_track_id
+                    slots_json
                 FROM annotations
                 WHERE video_stem=? AND frame_index=?
                 ORDER BY submitted_at ASC, annotation_id ASC
@@ -301,18 +308,8 @@ class AdminState:
                     "annotation_id": str(r["annotation_id"]),
                     "annotator_id": str(r["annotator_id"]),
                     "submitted_at": str(r["submitted_at"]),
-                    "p1_bbox_x": float(r["p1_bbox_x"]),
-                    "p1_bbox_y": float(r["p1_bbox_y"]),
-                    "p1_bbox_w": float(r["p1_bbox_w"]),
-                    "p1_bbox_h": float(r["p1_bbox_h"]),
-                    "p1_source": str(r["p1_source"]),
-                    "p1_ai_track_id": str(r["p1_ai_track_id"] or ""),
-                    "p2_bbox_x": float(r["p2_bbox_x"]),
-                    "p2_bbox_y": float(r["p2_bbox_y"]),
-                    "p2_bbox_w": float(r["p2_bbox_w"]),
-                    "p2_bbox_h": float(r["p2_bbox_h"]),
-                    "p2_source": str(r["p2_source"]),
-                    "p2_ai_track_id": str(r["p2_ai_track_id"] or ""),
+                    "slots_json": str(r["slots_json"]),
+                    "slots_summary": slot_summary_from_json(str(r["slots_json"])),
                 }
                 for r in annotation_rows
             ],

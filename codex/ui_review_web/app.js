@@ -1,7 +1,7 @@
 const I18N = {
   zh: {
-    page_title: "双人框标注复核",
-    page_subtitle: "P1(绿衣服) 与 P2(灰衣服) 双人标注流程。",
+    page_title: "多人框标注复核",
+    page_subtitle: "P1-P7 多人标注流程。",
     annotator_id: "标注员ID",
     skip_frame: "跳过当前帧",
     submit_next: "提交并下一帧",
@@ -10,10 +10,7 @@ const I18N = {
     timestamp_ms: "时间戳(ms)",
     annotation_count: "标注次数",
     chip_ai: "AI框（虚线 + track_id）",
-    chip_p1: "P1 用户框",
-    chip_p2: "P2 用户框",
-    p1_title: "P1（绿衣服）",
-    p2_title: "P2（灰衣服）",
+    chip_user: "用户框（P1-P7）",
     source: "来源",
     apply_ai_box: "应用AI框",
     manual_draw: "手动画框",
@@ -62,13 +59,11 @@ const I18N = {
     toast_history_loaded: "已刷新标注记录",
     toast_edit_saved: "修改已保存",
     progress_label: "进度",
-    slot_p1: "P1",
-    slot_p2: "P2",
     lang_toggle: "EN",
   },
   en: {
-    page_title: "Dual Person UI Review",
-    page_subtitle: "Dual-person review workflow for P1 (green clothes) and P2 (gray clothes).",
+    page_title: "Multi-Person UI Review",
+    page_subtitle: "Multi-person review workflow for P1-P7.",
     annotator_id: "Annotator ID",
     skip_frame: "Skip This Frame",
     submit_next: "Submit & Next Frame",
@@ -77,10 +72,7 @@ const I18N = {
     timestamp_ms: "Timestamp (ms)",
     annotation_count: "Annotation Count",
     chip_ai: "AI box (dashed + track_id)",
-    chip_p1: "P1 user box",
-    chip_p2: "P2 user box",
-    p1_title: "P1 (green clothes)",
-    p2_title: "P2 (gray clothes)",
+    chip_user: "User boxes (P1-P7)",
     source: "Source",
     apply_ai_box: "Apply AI box",
     manual_draw: "Manual draw",
@@ -129,16 +121,15 @@ const I18N = {
     toast_history_loaded: "History refreshed",
     toast_edit_saved: "Changes saved",
     progress_label: "Progress",
-    slot_p1: "P1",
-    slot_p2: "P2",
     lang_toggle: "中",
   },
 };
 
-const SLOT_META = {
-  p1: { label: "P1", color: "#1d9a58" },
-  p2: { label: "P2", color: "#54606e" },
-};
+const SLOT_ORDER = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+const SLOT_COLORS = ["#1d9a58", "#54606e", "#b05a13", "#7a43b6", "#c73752", "#0e8e9d", "#7d8d25"];
+const SLOT_META = Object.fromEntries(
+  SLOT_ORDER.map((slot, index) => [slot, { label: slot.toUpperCase(), color: SLOT_COLORS[index] }])
+);
 
 const HANDLE_SIZE = 8;
 const MIN_BOX_SIZE = 2;
@@ -152,10 +143,8 @@ const state = {
   image: null,
   aiBoxes: [],
   aiByTrack: new Map(),
-  slots: {
-    p1: { bbox: null, source: "not_set", aiTrackId: "" },
-    p2: { bbox: null, source: "not_set", aiTrackId: "" },
-  },
+  slotNames: SLOT_ORDER.slice(),
+  slots: {},
   activeSlot: "p1",
   drawSlot: null,
   action: null,
@@ -186,22 +175,16 @@ const refs = {
   canvas: document.getElementById("frameCanvas"),
   canvasHint: document.getElementById("canvasHint"),
   toast: document.getElementById("toast"),
-  p1Source: document.getElementById("p1Source"),
-  p2Source: document.getElementById("p2Source"),
-  p1AiButtons: document.getElementById("p1AiButtons"),
-  p2AiButtons: document.getElementById("p2AiButtons"),
-  p1DrawBtn: document.getElementById("p1DrawBtn"),
-  p2DrawBtn: document.getElementById("p2DrawBtn"),
-  p1AbsentBtn: document.getElementById("p1AbsentBtn"),
-  p2AbsentBtn: document.getElementById("p2AbsentBtn"),
-  p1X: document.getElementById("p1X"),
-  p1Y: document.getElementById("p1Y"),
-  p1W: document.getElementById("p1W"),
-  p1H: document.getElementById("p1H"),
-  p2X: document.getElementById("p2X"),
-  p2Y: document.getElementById("p2Y"),
-  p2W: document.getElementById("p2W"),
-  p2H: document.getElementById("p2H"),
+  slotTabs: document.getElementById("slotTabs"),
+  activeSlotTitle: document.getElementById("activeSlotTitle"),
+  activeSource: document.getElementById("activeSource"),
+  activeAiButtons: document.getElementById("activeAiButtons"),
+  activeDrawBtn: document.getElementById("activeDrawBtn"),
+  activeAbsentBtn: document.getElementById("activeAbsentBtn"),
+  activeX: document.getElementById("activeX"),
+  activeY: document.getElementById("activeY"),
+  activeW: document.getElementById("activeW"),
+  activeH: document.getElementById("activeH"),
   annotatorModal: document.getElementById("annotatorModal"),
   annotatorModalCloseBtn: document.getElementById("annotatorModalCloseBtn"),
   annotatorModalInput: document.getElementById("annotatorModalInput"),
@@ -250,8 +233,8 @@ function applyLanguage() {
   if (desc) {
     desc.textContent = t("annotator_modal_desc", { default_id: DEFAULT_ANNOTATOR_ID });
   }
-  syncSlotUI("p1");
-  syncSlotUI("p2");
+  syncActiveSlotUI();
+  renderSlotTabs();
   renderAiButtons();
   renderCurrentHint();
   updateProgress();
@@ -316,7 +299,7 @@ function maybePromptAnnotatorModal() {
 }
 
 function slotName(slot) {
-  return slot === "p1" ? t("slot_p1") : t("slot_p2");
+  return SLOT_META[slot]?.label || slot.toUpperCase();
 }
 
 function sourceLabel(source) {
@@ -471,7 +454,8 @@ function setSlotBbox(slot, bbox, source, aiTrackId = "") {
   state.slots[slot].bbox = bbox ? clampBbox(bbox) : null;
   state.slots[slot].source = source;
   state.slots[slot].aiTrackId = aiTrackId;
-  syncSlotUI(slot);
+  syncActiveSlotUI();
+  renderSlotTabs();
   drawCanvas();
 }
 
@@ -487,13 +471,41 @@ function sourceClass(source) {
   return "";
 }
 
-function syncSlotUI(slot) {
+function renderSlotTabs() {
+  if (!refs.slotTabs) return;
+  refs.slotTabs.innerHTML = "";
+  for (const slot of state.slotNames) {
+    const slotState = state.slots[slot];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "slot-tab";
+    if (slot === state.activeSlot) {
+      btn.classList.add("active");
+    }
+    btn.style.setProperty("--slot-color", SLOT_META[slot].color);
+    btn.innerHTML = `
+      <span class="slot-tab-label">${slotName(slot)}</span>
+      <span class="slot-tab-source">${sourceLabel(slotState.source)}</span>
+    `;
+    btn.addEventListener("click", () => {
+      state.activeSlot = slot;
+      syncActiveSlotUI();
+      renderSlotTabs();
+      drawCanvas();
+    });
+    refs.slotTabs.appendChild(btn);
+  }
+}
+
+function syncActiveSlotUI() {
+  const slot = state.activeSlot;
   const slotState = state.slots[slot];
+  if (!slotState) return;
   const isAbsent = slotState.source === "absent";
-  const inputs = slot === "p1"
-    ? [refs.p1X, refs.p1Y, refs.p1W, refs.p1H]
-    : [refs.p2X, refs.p2Y, refs.p2W, refs.p2H];
-  const sourceEl = slot === "p1" ? refs.p1Source : refs.p2Source;
+  const inputs = [refs.activeX, refs.activeY, refs.activeW, refs.activeH];
+
+  refs.activeSlotTitle.textContent = slotName(slot);
+  refs.activeSlotTitle.style.color = SLOT_META[slot].color;
 
   state.syncingInputs = true;
   if (isAbsent) {
@@ -516,8 +528,9 @@ function syncSlotUI(slot) {
     el.disabled = isAbsent;
   }
 
-  sourceEl.textContent = sourceLabel(slotState.source);
-  sourceEl.className = `source-badge ${sourceClass(slotState.source)}`;
+  refs.activeSource.textContent = sourceLabel(slotState.source);
+  refs.activeSource.className = `source-badge ${sourceClass(slotState.source)}`;
+  renderAiButtons();
 }
 
 function syncHeader() {
@@ -535,10 +548,19 @@ function syncHeader() {
 }
 
 function resetSlots() {
-  state.slots.p1 = { bbox: null, source: "not_set", aiTrackId: "" };
-  state.slots.p2 = { bbox: null, source: "not_set", aiTrackId: "" };
-  syncSlotUI("p1");
-  syncSlotUI("p2");
+  state.slots = {};
+  const names = Array.isArray(state.frame?.slot_names) && state.frame.slot_names.length
+    ? state.frame.slot_names
+    : SLOT_ORDER;
+  state.slotNames = names.slice();
+  for (const slot of state.slotNames) {
+    state.slots[slot] = { bbox: null, source: "not_set", aiTrackId: "" };
+  }
+  if (!state.slotNames.includes(state.activeSlot)) {
+    state.activeSlot = state.slotNames[0] || "p1";
+  }
+  syncActiveSlotUI();
+  renderSlotTabs();
 }
 
 function applyFrame(frame, options = {}) {
@@ -571,12 +593,8 @@ function applyFrame(frame, options = {}) {
 }
 
 function renderAiButtons() {
-  renderAiButtonsForSlot("p1");
-  renderAiButtonsForSlot("p2");
-}
-
-function renderAiButtonsForSlot(slot) {
-  const container = slot === "p1" ? refs.p1AiButtons : refs.p2AiButtons;
+  const slot = state.activeSlot;
+  const container = refs.activeAiButtons;
   container.innerHTML = "";
   const tracks = Array.from(state.aiByTrack.keys()).sort((a, b) => Number(a) - Number(b));
   if (tracks.length === 0) {
@@ -606,28 +624,7 @@ function canAutoApply(slot) {
 }
 
 function applyRecommendations(recommendations) {
-  if (!Array.isArray(recommendations) || recommendations.length === 0) {
-    return;
-  }
-  let applied = false;
-  for (const rec of recommendations) {
-    const trackId = String(rec.track_id);
-    const person = String(rec.recommended_person || "");
-    if (!state.aiByTrack.has(trackId)) {
-      continue;
-    }
-    if (person === "p1" && canAutoApply("p1")) {
-      applyAiToSlot("p1", trackId);
-      applied = true;
-    }
-    if (person === "p2" && canAutoApply("p2")) {
-      applyAiToSlot("p2", trackId);
-      applied = true;
-    }
-  }
-  if (applied) {
-    showToastKey("toast_recommend_applied");
-  }
+  return;
 }
 
 function renderImageSource(src, requestId) {
@@ -698,7 +695,7 @@ function drawCanvas() {
     ctx.restore();
   }
 
-  for (const slot of ["p1", "p2"]) {
+  for (const slot of state.slotNames) {
     const slotState = state.slots[slot];
     if (!bboxValid(slotState.bbox)) {
       continue;
@@ -766,7 +763,7 @@ function pointInBbox(point, bbox) {
 }
 
 function hitTest(point) {
-  for (const slot of [state.activeSlot, state.activeSlot === "p1" ? "p2" : "p1"]) {
+  for (const slot of [state.activeSlot, ...state.slotNames.filter((item) => item !== state.activeSlot)]) {
     const b = state.slots[slot].bbox;
     if (!bboxValid(b)) continue;
     const handles = handlePoints(b);
@@ -776,7 +773,7 @@ function hitTest(point) {
       }
     }
   }
-  for (const slot of ["p1", "p2"]) {
+  for (const slot of state.slotNames) {
     const b = state.slots[slot].bbox;
     if (!bboxValid(b)) continue;
     if (pointInBbox(point, b)) {
@@ -919,10 +916,8 @@ function onCanvasUp() {
   setHintByKey("hint_ready");
 }
 
-function bindNumericInputs(slot) {
-  const fields = slot === "p1"
-    ? { x: refs.p1X, y: refs.p1Y, w: refs.p1W, h: refs.p1H }
-    : { x: refs.p2X, y: refs.p2Y, w: refs.p2W, h: refs.p2H };
+function bindNumericInputs() {
+  const fields = { x: refs.activeX, y: refs.activeY, w: refs.activeW, h: refs.activeH };
   const onInput = () => {
     if (state.syncingInputs) return;
     const values = {
@@ -934,8 +929,7 @@ function bindNumericInputs(slot) {
     if (Object.values(values).some((v) => Number.isNaN(v))) {
       return;
     }
-    state.activeSlot = slot;
-    setSlotBbox(slot, values, "manual_param", "");
+    setSlotBbox(state.activeSlot, values, "manual_param", "");
   };
   fields.x.addEventListener("input", onInput);
   fields.y.addEventListener("input", onInput);
@@ -984,7 +978,7 @@ function markSlotAbsent(slot) {
 }
 
 function validateSubmission() {
-  for (const slot of ["p1", "p2"]) {
+  for (const slot of state.slotNames) {
     const s = state.slots[slot];
     const slotLabel = slotName(slot);
     if (s.source === "absent") {
@@ -1006,6 +1000,7 @@ function personSubmitPayload(slot) {
   const person = state.slots[slot];
   if (person.source === "absent") {
     return {
+      slot,
       bbox_x: 0,
       bbox_y: 0,
       bbox_w: 0,
@@ -1015,6 +1010,7 @@ function personSubmitPayload(slot) {
     };
   }
   return {
+    slot,
     bbox_x: round3(person.bbox.x),
     bbox_y: round3(person.bbox.y),
     bbox_w: round3(person.bbox.w),
@@ -1030,8 +1026,7 @@ function buildSubmitPayload() {
     video_stem: state.frame.video_stem,
     frame_index: state.frame.frame_index,
     timestamp_ms: state.frame.timestamp_ms,
-    p1: personSubmitPayload("p1"),
-    p2: personSubmitPayload("p2"),
+    slots: state.slotNames.map(personSubmitPayload),
   };
 }
 
@@ -1148,22 +1143,34 @@ async function loadHistory(options = {}) {
   }
 }
 
-function setSlotFromRecord(slot, record) {
-  const source = record[`${slot}_source`];
-  const trackId = record[`${slot}_ai_track_id`] || "";
-  const w = Number(record[`${slot}_bbox_w`]);
-  const h = Number(record[`${slot}_bbox_h`]);
-  if (source === "absent" || !w || !h) {
-    setSlotBbox(slot, null, "absent", "");
+function applySlotsFromAnnotation(slots) {
+  resetSlots();
+  if (!Array.isArray(slots)) {
     return;
   }
-  const bbox = {
-    x: Number(record[`${slot}_bbox_x`]),
-    y: Number(record[`${slot}_bbox_y`]),
-    w,
-    h,
-  };
-  setSlotBbox(slot, bbox, source, String(trackId));
+  for (const item of slots) {
+    if (!item || !state.slotNames.includes(item.slot)) continue;
+    if (item.source === "absent") {
+      setSlotBbox(item.slot, null, "absent", "");
+      continue;
+    }
+    if (!item.bbox_w || !item.bbox_h) {
+      continue;
+    }
+    setSlotBbox(
+      item.slot,
+      {
+        x: Number(item.bbox_x),
+        y: Number(item.bbox_y),
+        w: Number(item.bbox_w),
+        h: Number(item.bbox_h),
+      },
+      item.source || "not_set",
+      String(item.ai_track_id || "")
+    );
+  }
+  syncActiveSlotUI();
+  renderSlotTabs();
 }
 
 async function loadAnnotationDetail(annotationId) {
@@ -1173,8 +1180,7 @@ async function loadAnnotationDetail(annotationId) {
     );
     enterEditMode(annotationId);
     applyFrame(payload.frame, { skipRecommendations: true, isAssignment: false });
-    setSlotFromRecord("p1", payload.annotation);
-    setSlotFromRecord("p2", payload.annotation);
+    applySlotsFromAnnotation(payload.annotation.slots);
     syncHeader();
     renderHistory();
   } catch (err) {
@@ -1250,8 +1256,7 @@ async function saveEdit() {
       video_stem: state.frame.video_stem,
       frame_index: state.frame.frame_index,
       timestamp_ms: state.frame.timestamp_ms,
-      p1: personSubmitPayload("p1"),
-      p2: personSubmitPayload("p2"),
+      slots: state.slotNames.map(personSubmitPayload),
     };
     await postJson("/api/update_annotation", payload);
     await loadHistory({ silent: true });
@@ -1273,10 +1278,8 @@ function initEvents() {
   refs.nextFrameBtn.addEventListener("click", requestNextFrame);
   refs.submitBtn.addEventListener("click", submitAndNext);
 
-  refs.p1DrawBtn.addEventListener("click", () => startDraw("p1"));
-  refs.p2DrawBtn.addEventListener("click", () => startDraw("p2"));
-  refs.p1AbsentBtn.addEventListener("click", () => markSlotAbsent("p1"));
-  refs.p2AbsentBtn.addEventListener("click", () => markSlotAbsent("p2"));
+  refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
+  refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
 
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
   refs.saveEditBtn.addEventListener("click", saveEdit);
@@ -1285,8 +1288,7 @@ function initEvents() {
     refs.historyToggleBtn.addEventListener("click", () => toggleHistoryDock());
   }
 
-  bindNumericInputs("p1");
-  bindNumericInputs("p2");
+  bindNumericInputs();
 
   refs.canvas.addEventListener("mousedown", onCanvasDown);
   refs.canvas.addEventListener("mousemove", onCanvasMove);
@@ -1314,8 +1316,7 @@ function init() {
 
   initEvents();
   syncHeader();
-  syncSlotUI("p1");
-  syncSlotUI("p2");
+  resetSlots();
   setHintByKey("hint_start");
   applyLanguage();
   const prompted = maybePromptAnnotatorModal();

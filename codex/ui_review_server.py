@@ -28,6 +28,8 @@ DEFAULT_TARGET_VIDEO_STEMS = [
     "20260211_172257",
     "20260211_172522",
 ]
+SLOT_NAMES = [f"p{i}" for i in range(1, 8)]
+VALID_SLOT_SOURCES = {"ai", "manual_draw", "manual_param", "absent"}
 
 FRAME_POOL_COLUMNS = ["video_stem", "frame_index", "timestamp_ms"]
 COUNT_COLUMNS = ["video_stem", "frame_index", "timestamp_ms", "annotation_count"]
@@ -48,18 +50,7 @@ REVIEWED_COLUMNS = [
     "timestamp_ms",
     "annotator_id",
     "submitted_at",
-    "p1_bbox_x",
-    "p1_bbox_y",
-    "p1_bbox_w",
-    "p1_bbox_h",
-    "p1_source",
-    "p1_ai_track_id",
-    "p2_bbox_x",
-    "p2_bbox_y",
-    "p2_bbox_w",
-    "p2_bbox_h",
-    "p2_source",
-    "p2_ai_track_id",
+    "slots_json",
 ]
 
 
@@ -77,6 +68,41 @@ def _safe_float(value: Any) -> float:
 
 def resolve_repo_path(path: Path) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
+def empty_slot_record(slot_name: str) -> Dict[str, Any]:
+    return {
+        "slot": slot_name,
+        "bbox_x": 0.0,
+        "bbox_y": 0.0,
+        "bbox_w": 0.0,
+        "bbox_h": 0.0,
+        "source": "not_set",
+        "ai_track_id": "",
+    }
+
+
+def slot_summary_from_json(slots_json: str) -> str:
+    try:
+        slots = json.loads(slots_json)
+    except Exception:
+        return ""
+    if not isinstance(slots, list):
+        return ""
+    parts: List[str] = []
+    for item in slots:
+        if not isinstance(item, dict):
+            continue
+        slot = str(item.get("slot", "")).strip()
+        source = str(item.get("source", "")).strip()
+        track = str(item.get("ai_track_id", "") or "").strip()
+        if not slot:
+            continue
+        piece = f"{slot.upper()}:{source}"
+        if track:
+            piece += f"({track})"
+        parts.append(piece)
+    return " | ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -378,18 +404,7 @@ class AnnotationState:
                             timestamp_ms,
                             annotator_id,
                             submitted_at,
-                            p1_bbox_x,
-                            p1_bbox_y,
-                            p1_bbox_w,
-                            p1_bbox_h,
-                            p1_source,
-                            p1_ai_track_id,
-                            p2_bbox_x,
-                            p2_bbox_y,
-                            p2_bbox_w,
-                            p2_bbox_h,
-                            p2_source,
-                            p2_ai_track_id
+                            slots_json
                         FROM annotations
                         WHERE video_stem=?
                         ORDER BY submitted_at ASC, annotation_id ASC
@@ -435,18 +450,7 @@ class AnnotationState:
                     timestamp_ms,
                     annotator_id,
                     submitted_at,
-                    p1_bbox_x,
-                    p1_bbox_y,
-                    p1_bbox_w,
-                    p1_bbox_h,
-                    p1_source,
-                    p1_ai_track_id,
-                    p2_bbox_x,
-                    p2_bbox_y,
-                    p2_bbox_w,
-                    p2_bbox_h,
-                    p2_source,
-                    p2_ai_track_id
+                    slots_json
                 FROM annotations
                 WHERE video_stem=?
                 ORDER BY submitted_at ASC, annotation_id ASC
@@ -554,10 +558,7 @@ class AnnotationState:
                         frame_index,
                         timestamp_ms,
                         submitted_at,
-                        p1_source,
-                        p1_ai_track_id,
-                        p2_source,
-                        p2_ai_track_id
+                        slots_json
                     FROM annotations
                     WHERE annotator_id=?
                     ORDER BY submitted_at DESC, annotation_id DESC
@@ -574,10 +575,8 @@ class AnnotationState:
                 "frame_index": int(r["frame_index"]),
                 "timestamp_ms": float(r["timestamp_ms"]),
                 "submitted_at": str(r["submitted_at"]),
-                "p1_source": str(r["p1_source"]),
-                "p1_ai_track_id": str(r["p1_ai_track_id"] or ""),
-                "p2_source": str(r["p2_source"]),
-                "p2_ai_track_id": str(r["p2_ai_track_id"] or ""),
+                "slots_json": str(r["slots_json"]),
+                "slots_summary": slot_summary_from_json(str(r["slots_json"])),
             }
             for r in rows
         ]
@@ -625,6 +624,7 @@ class AnnotationState:
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),
             "recommendations": [],
+            "slot_names": SLOT_NAMES,
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
@@ -633,8 +633,13 @@ class AnnotationState:
         annotation["annotator_id"] = str(annotation["annotator_id"])
         annotation["video_stem"] = str(annotation["video_stem"])
         annotation["submitted_at"] = str(annotation["submitted_at"])
-        annotation["p1_ai_track_id"] = str(annotation["p1_ai_track_id"] or "")
-        annotation["p2_ai_track_id"] = str(annotation["p2_ai_track_id"] or "")
+        try:
+            parsed_slots = json.loads(str(annotation["slots_json"]))
+        except Exception:
+            parsed_slots = [empty_slot_record(slot) for slot in SLOT_NAMES]
+        if not isinstance(parsed_slots, list):
+            parsed_slots = [empty_slot_record(slot) for slot in SLOT_NAMES]
+        annotation["slots"] = parsed_slots
         return {"frame": frame, "annotation": annotation}
 
     def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -667,8 +672,7 @@ class AnnotationState:
                 if abs(float(payload.get("timestamp_ms", 0.0)) - timestamp_ms) > 1.0:
                     raise ValueError("timestamp mismatch")
 
-                p1 = self._validate_person_payload(payload.get("p1"), slot="p1")
-                p2 = self._validate_person_payload(payload.get("p2"), slot="p2")
+                slots = self._validate_slots_payload(payload.get("slots"))
                 submitted_at = _now_iso()
 
                 conn.execute(
@@ -676,34 +680,12 @@ class AnnotationState:
                     UPDATE annotations
                     SET
                         submitted_at=?,
-                        p1_bbox_x=?,
-                        p1_bbox_y=?,
-                        p1_bbox_w=?,
-                        p1_bbox_h=?,
-                        p1_source=?,
-                        p1_ai_track_id=?,
-                        p2_bbox_x=?,
-                        p2_bbox_y=?,
-                        p2_bbox_w=?,
-                        p2_bbox_h=?,
-                        p2_source=?,
-                        p2_ai_track_id=?
+                        slots_json=?
                     WHERE annotation_id=?
                     """,
                     (
                         submitted_at,
-                        p1["p1_bbox_x"],
-                        p1["p1_bbox_y"],
-                        p1["p1_bbox_w"],
-                        p1["p1_bbox_h"],
-                        p1["p1_source"],
-                        p1["p1_ai_track_id"],
-                        p2["p2_bbox_x"],
-                        p2["p2_bbox_y"],
-                        p2["p2_bbox_w"],
-                        p2["p2_bbox_h"],
-                        p2["p2_source"],
-                        p2["p2_ai_track_id"],
+                        json.dumps(slots, ensure_ascii=False),
                         annotation_id,
                     ),
                 )
@@ -820,6 +802,16 @@ class AnnotationState:
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
+            if self.reset_storage:
+                conn.executescript(
+                    """
+                    DROP TABLE IF EXISTS track_person_stats;
+                    DROP TABLE IF EXISTS annotations;
+                    DROP TABLE IF EXISTS assignments;
+                    DROP TABLE IF EXISTS frame_counts;
+                    DROP TABLE IF EXISTS frames;
+                    """
+                )
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS frames (
@@ -862,18 +854,7 @@ class AnnotationState:
                     timestamp_ms REAL NOT NULL,
                     annotator_id TEXT NOT NULL,
                     submitted_at TEXT NOT NULL,
-                    p1_bbox_x REAL NOT NULL,
-                    p1_bbox_y REAL NOT NULL,
-                    p1_bbox_w REAL NOT NULL,
-                    p1_bbox_h REAL NOT NULL,
-                    p1_source TEXT NOT NULL,
-                    p1_ai_track_id TEXT,
-                    p2_bbox_x REAL NOT NULL,
-                    p2_bbox_y REAL NOT NULL,
-                    p2_bbox_w REAL NOT NULL,
-                    p2_bbox_h REAL NOT NULL,
-                    p2_source TEXT NOT NULL,
-                    p2_ai_track_id TEXT
+                    slots_json TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS track_person_stats (
@@ -893,13 +874,6 @@ class AnnotationState:
                 ON annotations (submitted_at);
                 """
             )
-
-            if self.reset_storage:
-                conn.execute("DELETE FROM assignments")
-                conn.execute("DELETE FROM annotations")
-                conn.execute("DELETE FROM track_person_stats")
-                conn.execute("DELETE FROM frame_counts")
-                conn.execute("DELETE FROM frames")
 
             conn.executemany(
                 """
@@ -1289,45 +1263,7 @@ class AnnotationState:
         video_stem: str,
         ai_boxes: List[Dict[str, float | int]],
     ) -> List[Dict[str, str]]:
-        if not ai_boxes:
-            return []
-        raw_ids = {str(box.get("track_id")) for box in ai_boxes}
-        track_ids = [tid for tid in raw_ids if tid and tid != "None"]
-        if not track_ids:
-            return []
-        try:
-            track_ids.sort(key=lambda x: int(float(x)))
-        except Exception:
-            track_ids.sort()
-
-        placeholders = ",".join(["?"] * len(track_ids))
-        rows = conn.execute(
-            f"""
-            SELECT ai_track_id, p1_count, p2_count
-            FROM track_person_stats
-            WHERE video_stem=? AND ai_track_id IN ({placeholders})
-            """,
-            [video_stem, *track_ids],
-        ).fetchall()
-        counts = {
-            str(r["ai_track_id"]): (int(r["p1_count"]), int(r["p2_count"]))
-            for r in rows
-        }
-
-        recommendations: List[Dict[str, str]] = []
-        for tid in track_ids:
-            if tid not in counts:
-                continue
-            p1c, p2c = counts[tid]
-            if p1c == p2c:
-                continue
-            recommendations.append(
-                {
-                    "track_id": tid,
-                    "recommended_person": "p1" if p1c > p2c else "p2",
-                }
-            )
-        return recommendations
+        return []
 
     def _create_and_insert_assignment(
         self,
@@ -1392,6 +1328,7 @@ class AnnotationState:
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),
             "recommendations": recommendations,
+            "slot_names": SLOT_NAMES,
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
@@ -1417,109 +1354,18 @@ class AnnotationState:
                 timestamp_ms,
                 annotator_id,
                 submitted_at,
-                p1_bbox_x,
-                p1_bbox_y,
-                p1_bbox_w,
-                p1_bbox_h,
-                p1_source,
-                p1_ai_track_id,
-                p2_bbox_x,
-                p2_bbox_y,
-                p2_bbox_w,
-                p2_bbox_h,
-                p2_source,
-                p2_ai_track_id
+                slots_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(record[k] for k in REVIEWED_COLUMNS),
         )
 
     def _update_track_person_stats(self, conn: sqlite3.Connection, record: Dict[str, Any]) -> None:
-        updates: Dict[str, Dict[str, int]] = {}
-        for slot in ("p1", "p2"):
-            source = str(record.get(f"{slot}_source", ""))
-            track_id = str(record.get(f"{slot}_ai_track_id", "") or "").strip()
-            if source == "absent" or not track_id:
-                continue
-            entry = updates.setdefault(track_id, {"p1": 0, "p2": 0})
-            entry[slot] += 1
-
-        if not updates:
-            return
-
-        now = _now_iso()
-        for track_id, inc in updates.items():
-            conn.execute(
-                """
-                INSERT INTO track_person_stats (
-                    video_stem,
-                    ai_track_id,
-                    p1_count,
-                    p2_count,
-                    last_updated_at
-                )
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(video_stem, ai_track_id) DO UPDATE SET
-                    p1_count = p1_count + excluded.p1_count,
-                    p2_count = p2_count + excluded.p2_count,
-                    last_updated_at = excluded.last_updated_at
-                """,
-                (
-                    record["video_stem"],
-                    track_id,
-                    inc["p1"],
-                    inc["p2"],
-                    now,
-                ),
-            )
+        return
 
     def _rebuild_track_person_stats(self, conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM track_person_stats")
-        conn.executescript(
-            """
-            WITH stats AS (
-                SELECT
-                    video_stem,
-                    p1_ai_track_id AS ai_track_id,
-                    SUM(CASE WHEN p1_source != 'absent' AND p1_ai_track_id != '' THEN 1 ELSE 0 END) AS p1_count,
-                    0 AS p2_count,
-                    MAX(submitted_at) AS last_updated_at
-                FROM annotations
-                WHERE p1_ai_track_id IS NOT NULL
-                  AND p1_ai_track_id != ''
-                  AND p1_source != 'absent'
-                GROUP BY video_stem, p1_ai_track_id
-                UNION ALL
-                SELECT
-                    video_stem,
-                    p2_ai_track_id AS ai_track_id,
-                    0 AS p1_count,
-                    SUM(CASE WHEN p2_source != 'absent' AND p2_ai_track_id != '' THEN 1 ELSE 0 END) AS p2_count,
-                    MAX(submitted_at) AS last_updated_at
-                FROM annotations
-                WHERE p2_ai_track_id IS NOT NULL
-                  AND p2_ai_track_id != ''
-                  AND p2_source != 'absent'
-                GROUP BY video_stem, p2_ai_track_id
-            )
-            INSERT INTO track_person_stats (
-                video_stem,
-                ai_track_id,
-                p1_count,
-                p2_count,
-                last_updated_at
-            )
-            SELECT
-                video_stem,
-                ai_track_id,
-                SUM(p1_count) AS p1_count,
-                SUM(p2_count) AS p2_count,
-                MAX(last_updated_at) AS last_updated_at
-            FROM stats
-            GROUP BY video_stem, ai_track_id
-            """
-        )
 
     def _validate_and_build_record(
         self, annotator_id: str, payload: Dict[str, Any]
@@ -1534,57 +1380,71 @@ class AnnotationState:
         if abs(expected_ts - timestamp_ms) > 1.0:
             raise ValueError("timestamp does not match frame pool mapping")
 
-        p1 = self._validate_person_payload(payload.get("p1"), slot="p1")
-        p2 = self._validate_person_payload(payload.get("p2"), slot="p2")
+        slots = self._validate_slots_payload(payload.get("slots"))
         annotation_id = f"ann_{int(time.time() * 1000)}_{uuid.uuid4().hex[:10]}"
-        record: Dict[str, Any] = {
+        record = {
             "annotation_id": annotation_id,
             "video_stem": stem,
             "frame_index": frame_index,
             "timestamp_ms": _safe_float(timestamp_ms),
             "annotator_id": annotator_id,
             "submitted_at": _now_iso(),
+            "slots_json": json.dumps(slots, ensure_ascii=False),
         }
-        record.update(p1)
-        record.update(p2)
         return record
 
-    def _validate_person_payload(self, person: Any, slot: str) -> Dict[str, Any]:
-        if not isinstance(person, dict):
-            raise ValueError(f"{slot} payload is missing")
-        source = str(person.get("source", "")).strip()
-        if source not in {"ai", "manual_draw", "manual_param", "absent"}:
-            raise ValueError(f"{slot} source must be one of ai/manual_draw/manual_param/absent")
+    def _validate_slots_payload(self, slots: Any) -> List[Dict[str, Any]]:
+        if not isinstance(slots, list):
+            raise ValueError("slots payload is missing")
 
-        if source == "absent":
-            return {
-                f"{slot}_bbox_x": 0.0,
-                f"{slot}_bbox_y": 0.0,
-                f"{slot}_bbox_w": 0.0,
-                f"{slot}_bbox_h": 0.0,
-                f"{slot}_source": source,
-                f"{slot}_ai_track_id": "",
+        slot_map: Dict[str, Dict[str, Any]] = {}
+        for item in slots:
+            if not isinstance(item, dict):
+                raise ValueError("slot payload must be objects")
+            slot_name = str(item.get("slot", "")).strip().lower()
+            if slot_name not in SLOT_NAMES:
+                raise ValueError(f"invalid slot name: {slot_name}")
+            source = str(item.get("source", "")).strip()
+            if source not in VALID_SLOT_SOURCES:
+                raise ValueError(f"{slot_name} source must be one of ai/manual_draw/manual_param/absent")
+
+            if source == "absent":
+                slot_map[slot_name] = {
+                    "slot": slot_name,
+                    "bbox_x": 0.0,
+                    "bbox_y": 0.0,
+                    "bbox_w": 0.0,
+                    "bbox_h": 0.0,
+                    "source": source,
+                    "ai_track_id": "",
+                }
+                continue
+
+            x = _safe_float(item.get("bbox_x", 0.0))
+            y = _safe_float(item.get("bbox_y", 0.0))
+            w = _safe_float(item.get("bbox_w", 0.0))
+            h = _safe_float(item.get("bbox_h", 0.0))
+            if w <= 0 or h <= 0:
+                raise ValueError(f"{slot_name} bbox must have w>0 and h>0")
+            ai_track = item.get("ai_track_id", "")
+            if ai_track in ("", None):
+                ai_track_str = ""
+            else:
+                ai_track_str = str(int(float(ai_track)))
+            slot_map[slot_name] = {
+                "slot": slot_name,
+                "bbox_x": x,
+                "bbox_y": y,
+                "bbox_w": w,
+                "bbox_h": h,
+                "source": source,
+                "ai_track_id": ai_track_str,
             }
 
-        x = _safe_float(person.get("bbox_x", 0.0))
-        y = _safe_float(person.get("bbox_y", 0.0))
-        w = _safe_float(person.get("bbox_w", 0.0))
-        h = _safe_float(person.get("bbox_h", 0.0))
-        if w <= 0 or h <= 0:
-            raise ValueError(f"{slot} bbox must have w>0 and h>0")
-        ai_track = person.get("ai_track_id", "")
-        if ai_track in ("", None):
-            ai_track_str = ""
-        else:
-            ai_track_str = str(int(float(ai_track)))
-        return {
-            f"{slot}_bbox_x": x,
-            f"{slot}_bbox_y": y,
-            f"{slot}_bbox_w": w,
-            f"{slot}_bbox_h": h,
-            f"{slot}_source": source,
-            f"{slot}_ai_track_id": ai_track_str,
-        }
+        normalized: List[Dict[str, Any]] = []
+        for slot_name in SLOT_NAMES:
+            normalized.append(slot_map.get(slot_name, empty_slot_record(slot_name)))
+        return normalized
 
     def _append_jsonl_record(self, record: Dict[str, Any]) -> None:
         path = self.reviewed_raw_dir / f"{record['video_stem']}.frame_records.jsonl"

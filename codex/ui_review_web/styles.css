@@ -395,6 +395,50 @@ select {
   align-content: start;
 }
 
+.slot-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.slot-stack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slot-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.slot-tab {
+  border: 1px solid rgba(30, 50, 70, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  border-left: 4px solid var(--slot-color);
+}
+
+.slot-tab.active {
+  box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.14);
+}
+
+.slot-tab-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.slot-tab-source {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
 .person-card {
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -405,6 +449,10 @@ select {
 .person-card h2 {
   margin: 0 0 6px;
   font-size: 0.95rem;
+}
+
+.slot-editor h2 {
+  margin-bottom: 8px;
 }
 
 .person-card.p1 h2 {
@@ -465,6 +513,14 @@ select {
   gap: 4px;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.compact-row label {
+  font-size: 0.78rem;
+}
+
+.compact-grid input {
+  padding: 6px 8px;
 }
 
 .source-badge {

@@ -282,8 +282,7 @@ function renderRecentTable(rows) {
       <td>${row.video_stem}</td>
       <td>${row.frame_index}</td>
       <td>${row.submitted_at}</td>
-      <td>${sourceLabel(row.p1_source)}${row.p1_ai_track_id ? `(${row.p1_ai_track_id})` : ""}</td>
-      <td>${sourceLabel(row.p2_source)}${row.p2_ai_track_id ? `(${row.p2_ai_track_id})` : ""}</td>
+      <td colspan="2">${row.slots_summary || t("na")}</td>
     `;
     refs.recentBody.appendChild(tr);
   }
@@ -305,16 +304,12 @@ function renderFrameDetail(frame) {
   }
 
   for (const row of frame.annotations) {
-    const p1 = `xywh=(${row.p1_bbox_x.toFixed(2)}, ${row.p1_bbox_y.toFixed(2)}, ${row.p1_bbox_w.toFixed(2)}, ${row.p1_bbox_h.toFixed(2)}), source=${sourceLabel(row.p1_source)}${row.p1_ai_track_id ? `, ai=${row.p1_ai_track_id}` : ""}`;
-    const p2 = `xywh=(${row.p2_bbox_x.toFixed(2)}, ${row.p2_bbox_y.toFixed(2)}, ${row.p2_bbox_w.toFixed(2)}, ${row.p2_bbox_h.toFixed(2)}), source=${sourceLabel(row.p2_source)}${row.p2_ai_track_id ? `, ai=${row.p2_ai_track_id}` : ""}`;
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td title="${row.annotation_id}">${row.annotation_id}</td>
       <td>${row.annotator_id}</td>
       <td>${row.submitted_at}</td>
-      <td>${p1}</td>
-      <td>${p2}</td>
+      <td colspan="2">${row.slots_summary || t("na")}</td>
     `;
     refs.frameDetailBody.appendChild(tr);
   }

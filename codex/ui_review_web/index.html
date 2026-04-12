@@ -32,7 +32,7 @@
         <header class="header">
         <div class="header-title-block">
           <h1 id="pageTitle" data-i18n="page_title">双人框标注复核</h1>
-          <p id="pageSubtitle" data-i18n="page_subtitle">P1(绿衣服) 与 P2(灰衣服) 双人标注流程。</p>
+          <p id="pageSubtitle" data-i18n="page_subtitle">P1-P7 多人标注流程。</p>
         </div>
         <div class="header-meta">
           <label>
@@ -64,8 +64,7 @@
           <div class="canvas-head">
             <div class="legend">
               <span id="chipAi" class="chip chip-ai" data-i18n="chip_ai">AI框（虚线 + track_id）</span>
-              <span id="chipP1" class="chip chip-p1" data-i18n="chip_p1">P1 用户框</span>
-              <span id="chipP2" class="chip chip-p2" data-i18n="chip_p2">P2 用户框</span>
+              <span id="chipUser" class="chip chip-p1" data-i18n="chip_user">用户框（P1-P7）</span>
             </div>
             <div id="canvasHint" class="canvas-hint">准备就绪</div>
           </div>
@@ -75,53 +74,35 @@
         </section>
 
         <section class="control-panel">
-          <article class="person-card p1">
-            <h2 id="p1Title" data-i18n="p1_title">P1（绿衣服）</h2>
-            <div class="row">
-              <label id="p1SourceLabel" data-i18n="source">来源</label>
-              <div id="p1Source" class="source-badge">not_set</div>
+          <div class="slot-stack">
+            <div class="slot-stack-head">
+              <span id="slotStackTitle" class="label">Slots</span>
             </div>
-            <div class="row">
-              <label id="p1AiLabel" data-i18n="apply_ai_box">应用AI框</label>
-              <div id="p1AiButtons" class="ai-buttons"></div>
-            </div>
-            <div class="row">
-              <label id="p1ManualLabel" data-i18n="manual_draw">手动画框</label>
-              <div class="row-actions">
-                <button id="p1DrawBtn" class="btn" data-i18n="draw_new_box">绘制新框</button>
-                <button id="p1AbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
-              </div>
-            </div>
-            <div class="grid4">
-              <label>X <input id="p1X" type="number" step="0.1" /></label>
-              <label>Y <input id="p1Y" type="number" step="0.1" /></label>
-              <label>W <input id="p1W" type="number" step="0.1" /></label>
-              <label>H <input id="p1H" type="number" step="0.1" /></label>
-            </div>
-          </article>
+            <div id="slotTabs" class="slot-tabs"></div>
+          </div>
 
-          <article class="person-card p2">
-            <h2 id="p2Title" data-i18n="p2_title">P2（灰衣服）</h2>
-            <div class="row">
-              <label id="p2SourceLabel" data-i18n="source">来源</label>
-              <div id="p2Source" class="source-badge">not_set</div>
+          <article class="person-card slot-editor">
+            <h2 id="activeSlotTitle">P1</h2>
+            <div class="row compact-row">
+              <label id="activeSourceLabel" data-i18n="source">来源</label>
+              <div id="activeSource" class="source-badge">not_set</div>
             </div>
-            <div class="row">
-              <label id="p2AiLabel" data-i18n="apply_ai_box">应用AI框</label>
-              <div id="p2AiButtons" class="ai-buttons"></div>
+            <div class="row compact-row">
+              <label id="activeAiLabel" data-i18n="apply_ai_box">应用AI框</label>
+              <div id="activeAiButtons" class="ai-buttons"></div>
             </div>
-            <div class="row">
-              <label id="p2ManualLabel" data-i18n="manual_draw">手动画框</label>
+            <div class="row compact-row">
+              <label id="activeManualLabel" data-i18n="manual_draw">手动画框</label>
               <div class="row-actions">
-                <button id="p2DrawBtn" class="btn" data-i18n="draw_new_box">绘制新框</button>
-                <button id="p2AbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
+                <button id="activeDrawBtn" class="btn" data-i18n="draw_new_box">绘制新框</button>
+                <button id="activeAbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
               </div>
             </div>
-            <div class="grid4">
-              <label>X <input id="p2X" type="number" step="0.1" /></label>
-              <label>Y <input id="p2Y" type="number" step="0.1" /></label>
-              <label>W <input id="p2W" type="number" step="0.1" /></label>
-              <label>H <input id="p2H" type="number" step="0.1" /></label>
+            <div class="grid4 compact-grid">
+              <label>X <input id="activeX" type="number" step="0.1" /></label>
+              <label>Y <input id="activeY" type="number" step="0.1" /></label>
+              <label>W <input id="activeW" type="number" step="0.1" /></label>
+              <label>H <input id="activeH" type="number" step="0.1" /></label>
             </div>
           </article>
         </section>
