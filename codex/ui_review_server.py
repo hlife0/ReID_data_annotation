@@ -22,7 +22,7 @@ import cv2
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-TARGET_VIDEO_STEMS = [
+DEFAULT_TARGET_VIDEO_STEMS = [
     "20260211_171423",
     "20260211_171724",
     "20260211_172257",
@@ -204,6 +204,8 @@ class AnnotationState:
         self.frame_cache_quality = frame_cache_quality
 
         self.video_paths: Dict[str, Path] = {}
+        self.timestamp_paths: Dict[str, Path] = {}
+        self.video_stems: List[str] = []
         self.frame_pool: List[FrameRecord] = []
         self.frame_lookup: Dict[Tuple[str, int], FrameRecord] = {}
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, float | int]]] = {}
@@ -225,7 +227,7 @@ class AnnotationState:
             self._reset_storage_artifacts()
 
         self.logger.info("UI review service init start")
-        self.video_paths = self._load_manifest_video_paths()
+        self.video_paths, self.timestamp_paths, self.video_stems = self._load_manifest_assets()
         self.frame_pool = self._build_frame_pool()
         self.frame_lookup = {(r.video_stem, r.frame_index): r for r in self.frame_pool}
         self.ai_boxes = self._load_ai_boxes()
@@ -366,7 +368,7 @@ class AnnotationState:
         with self._lock:
             conn = self._connect()
             try:
-                for stem in TARGET_VIDEO_STEMS:
+                for stem in self.video_stems:
                     rows = conn.execute(
                         """
                         SELECT
@@ -420,7 +422,7 @@ class AnnotationState:
         return exported
 
     def export_reviewed_csv_for_stem(self, stem: str) -> int:
-        if stem not in TARGET_VIDEO_STEMS:
+        if stem not in self.video_stems:
             raise ValueError(f"invalid video_stem: {stem}")
         conn = self._connect()
         try:
@@ -618,6 +620,7 @@ class AnnotationState:
             "frame_index": frame_index,
             "timestamp_ms": _safe_float(row["timestamp_ms"]),
             "annotation_count": count_before,
+            "total_frames": len(self.frame_pool),
             "image_width": width,
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),
@@ -795,7 +798,7 @@ class AnnotationState:
         self.db_path.unlink(missing_ok=True)
         self.count_path.unlink(missing_ok=True)
         self.assignment_log_path.unlink(missing_ok=True)
-        for stem in TARGET_VIDEO_STEMS:
+        for stem in self.video_stems or DEFAULT_TARGET_VIDEO_STEMS:
             (self.reviewed_raw_dir / f"{stem}.frame_records.jsonl").unlink(missing_ok=True)
             (self.reviewed_dir / f"{stem}.reviewed.csv").unlink(missing_ok=True)
         self.logger.info("storage reset requested: removed existing db and review artifacts")
@@ -953,15 +956,19 @@ class AnnotationState:
         finally:
             conn.close()
 
-    def _load_manifest_video_paths(self) -> Dict[str, Path]:
+    def _load_manifest_assets(self) -> Tuple[Dict[str, Path], Dict[str, Path], List[str]]:
         if not self.manifest_path.exists():
             raise FileNotFoundError(f"manifest not found: {self.manifest_path}")
-        paths: Dict[str, Path] = {}
+        video_paths: Dict[str, Path] = {}
+        timestamp_paths: Dict[str, Path] = {}
         with self.manifest_path.open("r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 stem = row.get("video_stem", "").strip()
-                if stem not in TARGET_VIDEO_STEMS:
+                if not stem:
+                    continue
+                status = row.get("status", "").strip().lower()
+                if status == "blocked":
                     continue
                 raw_video_path = Path(row.get("video_path", "").strip())
                 video_path = (
@@ -971,23 +978,25 @@ class AnnotationState:
                 )
                 if not video_path.exists():
                     raise FileNotFoundError(f"video path missing for {stem}: {video_path}")
-                paths[stem] = video_path
-        missing = [stem for stem in TARGET_VIDEO_STEMS if stem not in paths]
-        if missing:
-            raise ValueError(f"manifest missing target video stems: {missing}")
-        return paths
+                raw_timestamp_path = Path(row.get("timestamp_path", "").strip())
+                timestamp_path = (
+                    raw_timestamp_path
+                    if raw_timestamp_path.is_absolute()
+                    else (REPO_ROOT / raw_timestamp_path)
+                )
+                if not timestamp_path.exists():
+                    raise FileNotFoundError(f"timestamp path missing for {stem}: {timestamp_path}")
+                video_paths[stem] = video_path
+                timestamp_paths[stem] = timestamp_path
+        video_stems = sorted(video_paths)
+        if not video_stems:
+            raise ValueError(f"manifest has no usable video stems: {self.manifest_path}")
+        return video_paths, timestamp_paths, video_stems
 
     def _build_frame_pool(self) -> List[FrameRecord]:
         all_records: List[FrameRecord] = []
-        for stem in TARGET_VIDEO_STEMS:
-            ts_path = (
-                REPO_ROOT
-                / "data"
-                / "required"
-                / stem
-                / "video"
-                / f"{stem}_frame_timestamps_retimed.csv"
-            )
+        for stem in self.video_stems:
+            ts_path = self.timestamp_paths[stem]
             if not ts_path.exists():
                 raise FileNotFoundError(f"timestamp csv not found: {ts_path}")
             with ts_path.open("r", newline="", encoding="utf-8") as f:
@@ -1024,7 +1033,7 @@ class AnnotationState:
 
     def _load_ai_boxes(self) -> Dict[Tuple[str, int], List[Dict[str, float | int]]]:
         ai_boxes: Dict[Tuple[str, int], List[Dict[str, float | int]]] = {}
-        for stem in TARGET_VIDEO_STEMS:
+        for stem in self.video_stems:
             path = self.batch_dir / "pseudo_labels" / f"{stem}.auto.csv"
             if not path.exists():
                 raise FileNotFoundError(f"missing pseudo label file: {path}")
@@ -1054,7 +1063,7 @@ class AnnotationState:
         return ai_boxes
 
     def _init_review_files(self) -> None:
-        for stem in TARGET_VIDEO_STEMS:
+        for stem in self.video_stems:
             jsonl_path = self.reviewed_raw_dir / f"{stem}.frame_records.jsonl"
             reviewed_csv = self.reviewed_dir / f"{stem}.reviewed.csv"
             jsonl_path.touch(exist_ok=True)
@@ -1378,6 +1387,7 @@ class AnnotationState:
             "frame_index": frame_index,
             "timestamp_ms": _safe_float(rec.timestamp_ms),
             "annotation_count": count_before,
+            "total_frames": len(self.frame_pool),
             "image_width": width,
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),

@@ -14,14 +14,6 @@ from urllib.parse import parse_qs, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-TARGET_VIDEO_STEMS = [
-    "20260211_171423",
-    "20260211_171724",
-    "20260211_172257",
-    "20260211_172522",
-]
-
-
 def _now_human() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -63,6 +55,7 @@ class AdminState:
         self.static_dir = static_dir
         self.db_path = self.batch_dir / "ui_tasks" / "ui_review.sqlite3"
         self.logs_dir = self.batch_dir / "logs"
+        self.video_stems: List[str] = []
         self.logger = RunLogger(
             run_log_path=self.logs_dir / "run.log",
             error_log_path=self.logs_dir / "errors.log",
@@ -76,6 +69,14 @@ class AdminState:
             )
         if not self.static_dir.exists():
             raise FileNotFoundError(f"admin static dir not found: {self.static_dir}")
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT video_stem FROM frames ORDER BY video_stem ASC"
+            ).fetchall()
+        finally:
+            conn.close()
+        self.video_stems = [str(row["video_stem"]) for row in rows]
         self.logger.info(f"admin panel db ready: {self.db_path}")
 
     def _connect(self) -> sqlite3.Connection:
@@ -238,7 +239,7 @@ class AdminState:
         }
 
     def frame_detail(self, video_stem: str, frame_index: int) -> Dict[str, Any]:
-        if video_stem not in TARGET_VIDEO_STEMS:
+        if video_stem not in self.video_stems:
             raise ValueError(f"invalid video_stem: {video_stem}")
         if frame_index <= 0:
             raise ValueError("frame_index must be > 0")

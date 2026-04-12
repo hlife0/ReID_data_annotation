@@ -144,7 +144,6 @@ const HANDLE_SIZE = 8;
 const MIN_BOX_SIZE = 2;
 const DEFAULT_ANNOTATOR_ID = "annotator_demo";
 const ANNOTATOR_STORAGE_KEY = "ui_review_annotator_id";
-const PROGRESS_TARGET = 4000;
 const PREFETCH_WINDOW = 5;
 const IMAGE_CACHE_LIMIT = 12;
 
@@ -172,6 +171,7 @@ const state = {
   editing: false,
   editingAnnotationId: "",
   lastAssignmentFrame: null,
+  progressTarget: 4000,
 };
 
 const refs = {
@@ -543,6 +543,9 @@ function resetSlots() {
 
 function applyFrame(frame, options = {}) {
   state.frame = frame;
+  if (Number.isFinite(Number(frame.total_frames)) && Number(frame.total_frames) > 0) {
+    state.progressTarget = Number(frame.total_frames);
+  }
   state.aiBoxes = Array.isArray(frame.ai_boxes) ? frame.ai_boxes : [];
   state.aiByTrack = new Map();
   for (const box of state.aiBoxes) {
@@ -560,6 +563,7 @@ function applyFrame(frame, options = {}) {
     applyRecommendations(frame.recommendations);
   }
   syncHeader();
+  updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
     state.lastAssignmentFrame = frame;
@@ -1123,9 +1127,10 @@ function renderHistory() {
 function updateProgress() {
   if (!refs.progressFill || !refs.progressText) return;
   const count = Array.isArray(state.history) ? state.history.length : 0;
-  const ratio = Math.min(1, count / PROGRESS_TARGET);
+  const target = Math.max(1, Number(state.progressTarget) || 1);
+  const ratio = Math.min(1, count / target);
   refs.progressFill.style.width = `${Math.round(ratio * 100)}%`;
-  refs.progressText.textContent = `${count}/${PROGRESS_TARGET}`;
+  refs.progressText.textContent = `${count}/${target}`;
 }
 
 async function loadHistory(options = {}) {
