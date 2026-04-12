@@ -9,6 +9,7 @@ data
 batch_*/
 annotation/batch_*/
 *.pt
+staging/
 
 # Runtime/config secrets
 ngrok.yml
