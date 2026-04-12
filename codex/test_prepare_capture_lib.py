@@ -5,8 +5,8 @@ import unittest
 
 from prepare_capture_lib import (
     active_devices_for_window,
-    build_full_capture_session,
     build_frame_timestamps,
+    build_segment_session,
     build_device_intervals,
     build_union_intervals,
     choose_best_device_pair,
@@ -123,16 +123,21 @@ class SliceIntervalsToSessionsTests(unittest.TestCase):
         self.assertEqual(sessions[1].end_ms, 1775822520000)
 
 
-class BuildFullCaptureSessionTests(unittest.TestCase):
-    def test_keeps_one_unsliced_session(self) -> None:
-        session = build_full_capture_session(
+class BuildSegmentSessionTests(unittest.TestCase):
+    def test_builds_one_session_from_raw_imu_segment(self) -> None:
+        session = build_segment_session(
             capture_stem="20260410_195433",
-            start_ms=1775822073000,
-            end_ms=1775829359733,
+            raw_segment_name="20-06-24-895",
+            segment_start_ms=1775822784900,
+            segment_end_ms=1775823481295,
+            video_start_ms=1775822073000,
+            video_end_ms=1775829359733,
         )
-        self.assertEqual(session.stem, "20260410_195433")
-        self.assertEqual(session.start_ms, 1775822073000)
-        self.assertEqual(session.end_ms, 1775829359733)
+        self.assertIsNotNone(session)
+        assert session is not None
+        self.assertEqual(session.stem, "20260410_195433_seg_200624895")
+        self.assertEqual(session.start_ms, 1775822784900)
+        self.assertEqual(session.end_ms, 1775823481295)
 
 
 if __name__ == "__main__":

@@ -191,8 +191,32 @@ def build_full_capture_session(
     return SessionWindow(stem=capture_stem, start_ms=start_ms, end_ms=end_ms)
 
 
+def build_segment_session(
+    capture_stem: str,
+    raw_segment_name: str,
+    segment_start_ms: int,
+    segment_end_ms: int,
+    video_start_ms: int,
+    video_end_ms: int,
+) -> SessionWindow | None:
+    start_ms = max(segment_start_ms, video_start_ms)
+    end_ms = min(segment_end_ms, video_end_ms)
+    if end_ms <= start_ms:
+        return None
+    segment_suffix = raw_segment_name.replace("-", "")
+    return SessionWindow(
+        stem=f"{capture_stem}_seg_{segment_suffix}",
+        start_ms=start_ms,
+        end_ms=end_ms,
+    )
+
+
 def iter_raw_imu_csvs(source_root: Path) -> list[Path]:
     return sorted(path for path in source_root.rglob("data_*.csv") if path.is_file())
+
+
+def discover_raw_segment_dirs(source_root: Path) -> list[Path]:
+    return sorted(path for path in source_root.iterdir() if path.is_dir())
 
 
 def normalize_imu_directory(
@@ -241,6 +265,60 @@ def normalize_imu_directory(
                     writers[device_id].writerow(
                         [row.get(column, "") for column in fieldnames]
                         + [f"{epoch_ms:.3f}", csv_path.parent.name, csv_path.name]
+                    )
+    finally:
+        for handle in file_handles.values():
+            handle.close()
+
+    return output_paths
+
+
+def normalize_segment_directory(
+    segment_root: Path,
+    normalized_root: Path,
+    capture_date: str,
+    timezone_name: str,
+) -> dict[str, Path]:
+    csv_paths = sorted(path for path in segment_root.glob("data_*.csv") if path.is_file())
+    if not csv_paths:
+        raise FileNotFoundError(f"no raw segment csv files found under {segment_root}")
+
+    normalized_root.mkdir(parents=True, exist_ok=True)
+    by_device_dir = normalized_root / "by_device"
+    by_device_dir.mkdir(parents=True, exist_ok=True)
+
+    writers: dict[str, csv.writer] = {}
+    file_handles: dict[str, object] = {}
+    output_paths: dict[str, Path] = {}
+
+    try:
+        for csv_path in csv_paths:
+            with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle)
+                fieldnames = list(reader.fieldnames or [])
+                if not fieldnames:
+                    continue
+                output_header = fieldnames + ["epoch_ms", "source_folder", "source_file"]
+
+                for row in reader:
+                    device_id = (row.get("设备名称", "") or "").strip()
+                    time_of_day = (row.get("时间", "") or "").strip()
+                    if not device_id or not time_of_day:
+                        continue
+
+                    if device_id not in writers:
+                        output_path = by_device_dir / f"{device_id}.csv"
+                        fh = output_path.open("w", encoding="utf-8", newline="")
+                        writer = csv.writer(fh)
+                        writer.writerow(output_header)
+                        writers[device_id] = writer
+                        file_handles[device_id] = fh
+                        output_paths[device_id] = output_path
+
+                    epoch_ms = parse_time_of_day_to_epoch_ms(capture_date, time_of_day, timezone_name)
+                    writers[device_id].writerow(
+                        [row.get(column, "") for column in fieldnames]
+                        + [f"{epoch_ms:.3f}", segment_root.name, csv_path.name]
                     )
     finally:
         for handle in file_handles.values():
