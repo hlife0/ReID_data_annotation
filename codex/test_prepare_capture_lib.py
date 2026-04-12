@@ -5,6 +5,7 @@ import unittest
 
 from prepare_capture_lib import (
     active_devices_for_window,
+    build_full_capture_session,
     build_frame_timestamps,
     build_device_intervals,
     build_union_intervals,
@@ -120,6 +121,18 @@ class SliceIntervalsToSessionsTests(unittest.TestCase):
         self.assertEqual(sessions[0].end_ms, 1775822460000)
         self.assertEqual(sessions[1].start_ms, 1775822460000)
         self.assertEqual(sessions[1].end_ms, 1775822520000)
+
+
+class BuildFullCaptureSessionTests(unittest.TestCase):
+    def test_keeps_one_unsliced_session(self) -> None:
+        session = build_full_capture_session(
+            capture_stem="20260410_195433",
+            start_ms=1775822073000,
+            end_ms=1775829359733,
+        )
+        self.assertEqual(session.stem, "20260410_195433")
+        self.assertEqual(session.start_ms, 1775822073000)
+        self.assertEqual(session.end_ms, 1775829359733)
 
 
 if __name__ == "__main__":

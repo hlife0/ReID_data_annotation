@@ -181,6 +181,16 @@ def slice_intervals_to_sessions(
     return sessions
 
 
+def build_full_capture_session(
+    capture_stem: str,
+    start_ms: int,
+    end_ms: int,
+) -> SessionWindow:
+    if end_ms <= start_ms:
+        raise ValueError("end_ms must be greater than start_ms")
+    return SessionWindow(stem=capture_stem, start_ms=start_ms, end_ms=end_ms)
+
+
 def iter_raw_imu_csvs(source_root: Path) -> list[Path]:
     return sorted(path for path in source_root.rglob("data_*.csv") if path.is_file())
 

@@ -8,19 +8,14 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from prepare_capture_lib import (
-    active_devices_for_window,
+    build_full_capture_session,
     build_device_summaries,
     build_frame_timestamps,
-    build_union_intervals,
     choose_best_device_pair_from_summaries,
-    clip_video_segment,
-    filter_device_csv_to_window,
     hardlink_or_copy,
     normalize_imu_directory,
     parse_capture_stem_start_ms,
     probe_video,
-    select_frame_range,
-    slice_intervals_to_sessions,
     write_frame_timestamps_csv,
 )
 
@@ -99,76 +94,48 @@ def main() -> None:
     else:
         advisory_pair = choose_best_device_pair_from_summaries(summaries, video_start_ms, video_end_ms)
 
-    session_source_intervals = build_union_intervals(
-        {device_id: summary.intervals for device_id, summary in summaries.items()},
-        window_start_ms=video_start_ms,
-        window_end_ms=video_end_ms,
-        merge_gap_ms=args.pair_merge_gap_ms,
-    )
-    sessions = slice_intervals_to_sessions(
-        intervals=session_source_intervals,
-        session_length_ms=args.session_seconds * 1000,
-        min_session_ms=args.min_session_seconds * 1000,
-        timezone_name=args.timezone,
-    )
-    if args.max_sessions > 0:
-        sessions = sessions[: args.max_sessions]
-    if not sessions:
-        raise SystemExit("no sessions produced from the chosen device pair")
+    session = build_full_capture_session(capture_stem=capture_stem, start_ms=video_start_ms, end_ms=video_end_ms)
 
     session_payloads: list[dict[str, object]] = []
-    for session in sessions:
-        session_root = required_root / session.stem
-        if session_root.exists():
-            shutil.rmtree(session_root)
-        video_dir = session_root / "video"
-        imu_dir = session_root / "imu"
-        video_dir.mkdir(parents=True, exist_ok=True)
-        imu_dir.mkdir(parents=True, exist_ok=True)
+    session_root = required_root / session.stem
+    if session_root.exists():
+        shutil.rmtree(session_root)
+    video_dir = session_root / "video"
+    imu_dir = session_root / "imu"
+    video_dir.mkdir(parents=True, exist_ok=True)
+    imu_dir.mkdir(parents=True, exist_ok=True)
 
-        start_index, end_index = select_frame_range(frame_timestamps_ms, session.start_ms, session.end_ms)
+    out_video = video_dir / f"{session.stem}.mp4"
+    out_ts = video_dir / f"{session.stem}_frame_timestamps.csv"
+    out_video_retimed = video_dir / f"{session.stem}_retimed.mp4"
+    out_ts_retimed = video_dir / f"{session.stem}_frame_timestamps_retimed.csv"
 
-        out_video = video_dir / f"{session.stem}.mp4"
-        out_ts = video_dir / f"{session.stem}_frame_timestamps.csv"
-        out_video_retimed = video_dir / f"{session.stem}_retimed.mp4"
-        out_ts_retimed = video_dir / f"{session.stem}_frame_timestamps_retimed.csv"
+    shutil.copy2(source_video, out_video)
+    write_frame_timestamps_csv(out_ts, frame_timestamps_ms, 0, len(frame_timestamps_ms) - 1)
+    hardlink_or_copy(out_video, out_video_retimed)
+    hardlink_or_copy(out_ts, out_ts_retimed)
 
-        offset_seconds = max(0.0, (session.start_ms - video_start_ms) / 1000.0)
-        duration_seconds = max(0.001, (session.end_ms - session.start_ms) / 1000.0)
+    imu_rows_by_device: dict[str, int] = {}
+    exported_devices: list[str] = []
+    for device_id in sorted(summaries):
+        imu_out = imu_dir / f"{session.stem}_{device_id}.csv"
+        shutil.copy2(summaries[device_id].csv_path, imu_out)
+        exported_devices.append(device_id)
+        imu_rows_by_device[device_id] = summaries[device_id].rows
 
-        clip_video_segment(source_video, out_video, offset_seconds, duration_seconds)
-        write_frame_timestamps_csv(out_ts, frame_timestamps_ms, start_index, end_index)
-        hardlink_or_copy(out_video, out_video_retimed)
-        hardlink_or_copy(out_ts, out_ts_retimed)
-
-        active_devices = active_devices_for_window(
-            {device_id: summary.intervals for device_id, summary in summaries.items()},
-            start_ms=session.start_ms,
-            end_ms=session.end_ms,
-        )
-        imu_rows_by_device: dict[str, int] = {}
-        for device_id in active_devices:
-            imu_out = imu_dir / f"{session.stem}_{device_id}.csv"
-            imu_rows_by_device[device_id] = filter_device_csv_to_window(
-                summaries[device_id].csv_path,
-                imu_out,
-                session.start_ms,
-                session.end_ms,
-            )
-
-        session_payloads.append(
-            {
-                "session_stem": session.stem,
-                "start_ms": session.start_ms,
-                "end_ms": session.end_ms,
-                "frame_start_index": start_index + 1,
-                "frame_end_index": end_index + 1,
-                "active_devices": active_devices,
-                "imu_rows_by_device": imu_rows_by_device,
-                "video_path": str(out_video),
-                "timestamp_path": str(out_ts),
-            }
-        )
+    session_payloads.append(
+        {
+            "session_stem": session.stem,
+            "start_ms": session.start_ms,
+            "end_ms": session.end_ms,
+            "frame_start_index": 1,
+            "frame_end_index": len(frame_timestamps_ms),
+            "active_devices": exported_devices,
+            "imu_rows_by_device": imu_rows_by_device,
+            "video_path": str(out_video),
+            "timestamp_path": str(out_ts),
+        }
+    )
 
     summary_payload = {
         "source_video": str(source_video),
@@ -196,7 +163,7 @@ def main() -> None:
             for device_id, summary in summaries.items()
         },
         "advisory_pair": asdict(advisory_pair),
-        "session_source_intervals": session_source_intervals,
+        "session_source_intervals": [[video_start_ms, video_end_ms]],
         "sessions": session_payloads,
         "required_root": str(required_root),
     }
