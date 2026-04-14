@@ -230,6 +230,8 @@ const refs = {
   issueTrackText: document.getElementById("issueTrackText"),
   issueReasonList: document.getElementById("issueReasonList"),
   issueTimeline: document.getElementById("issueTimeline"),
+  issuePrevFrameBtn: document.getElementById("issuePrevFrameBtn"),
+  issueNextFrameBtn: document.getElementById("issueNextFrameBtn"),
   issueListBody: document.getElementById("issueListBody"),
   refreshIssuesBtn: document.getElementById("refreshIssuesBtn"),
 };
@@ -611,6 +613,12 @@ function renderIssueSummary() {
     ? issue.primary_track_ids.join(", ")
     : "-";
   refs.issueTrackText.textContent = t("issue_tracks", { tracks });
+  if (refs.issuePrevFrameBtn) {
+    refs.issuePrevFrameBtn.disabled = Number(state.frame?.frame_index) <= Number(issue.start_frame);
+  }
+  if (refs.issueNextFrameBtn) {
+    refs.issueNextFrameBtn.disabled = Number(state.frame?.frame_index) >= Number(issue.end_frame);
+  }
   refs.issueReasonList.innerHTML = "";
   const reasons = Array.isArray(issue.reason_codes) ? issue.reason_codes : [];
   for (const reason of reasons) {
@@ -1253,6 +1261,25 @@ async function loadIssueDetail(issueId) {
   }
 }
 
+async function loadIssueFrame(issueId, frameIndex) {
+  try {
+    const payload = await getJson(
+      `/api/issue_frame?issue_id=${encodeURIComponent(issueId)}&frame_index=${encodeURIComponent(frameIndex)}`
+    );
+    applyIssuePayload(payload, { isAssignment: true });
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+function stepIssueFrame(delta) {
+  if (!state.currentIssue || !state.frame) {
+    return;
+  }
+  const nextFrame = Number(state.frame.frame_index) + delta;
+  loadIssueFrame(state.currentIssue.issue_id, nextFrame);
+}
+
 async function submitAndNext() {
   if (!state.frame) {
     showToastKey("toast_no_frame", {}, true);
@@ -1556,6 +1583,12 @@ function initEvents() {
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
   if (refs.refreshIssuesBtn) {
     refs.refreshIssuesBtn.addEventListener("click", () => loadIssues());
+  }
+  if (refs.issuePrevFrameBtn) {
+    refs.issuePrevFrameBtn.addEventListener("click", () => stepIssueFrame(-1));
+  }
+  if (refs.issueNextFrameBtn) {
+    refs.issueNextFrameBtn.addEventListener("click", () => stepIssueFrame(1));
   }
   refs.saveEditBtn.addEventListener("click", saveEdit);
   refs.exitEditBtn.addEventListener("click", exitEditMode);

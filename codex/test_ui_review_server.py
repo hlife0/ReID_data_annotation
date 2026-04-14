@@ -204,6 +204,9 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         detail = state.issue_detail("sample_issue_001")
         self.assertEqual(detail["issue"]["issue_id"], "sample_issue_001")
         self.assertEqual(detail["frame"]["frame_index"], 1)
+        stepped = state.issue_frame("sample_issue_001", 2)
+        self.assertEqual(stepped["issue"]["issue_id"], "sample_issue_001")
+        self.assertEqual(stepped["frame"]["frame_index"], 2)
 
     def test_issue_mode_submit_returns_next_issue_payload(self) -> None:
         state = self._make_state()

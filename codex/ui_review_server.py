@@ -824,6 +824,13 @@ class AnnotationState:
             raise ValueError("issue not found")
         return self._issue_payload(issue)
 
+    def issue_frame(self, issue_id: str, frame_index: int) -> Dict[str, Any]:
+        issue = self.issue_lookup.get(issue_id)
+        if issue is None:
+            raise ValueError("issue not found")
+        target_frame = max(issue.start_frame, min(issue.end_frame, int(frame_index)))
+        return self._issue_payload(issue, focus_frame=target_frame)
+
     def list_issues(self, video_stem: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
         normalized_stem = str(video_stem or "").strip()
         max_items = max(1, min(int(limit), 500))
@@ -1429,8 +1436,8 @@ class AnnotationState:
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
-    def _issue_payload(self, issue: IssueRecord) -> Dict[str, Any]:
-        focus_frame = issue.start_frame
+    def _issue_payload(self, issue: IssueRecord, focus_frame: int | None = None) -> Dict[str, Any]:
+        focus_frame = issue.start_frame if focus_frame is None else focus_frame
         annotation_count = self._annotation_count_for_frame(issue.video_stem, focus_frame)
         frame = self._build_frame_payload(issue.video_stem, focus_frame, annotation_count)
         return {
@@ -1905,6 +1912,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_issue_list(parsed.query)
         if path == "/api/issue_detail":
             return self._handle_issue_detail(parsed.query)
+        if path == "/api/issue_frame":
+            return self._handle_issue_frame(parsed.query)
         if path == "/api/frame_image":
             return self._handle_frame_image(parsed.query)
         if path == "/":
@@ -2177,6 +2186,31 @@ class UiHandler(BaseHTTPRequestHandler):
                 {"ok": False, "error": str(exc)},
             )
         self._send_json(HTTPStatus.OK, {"ok": True, "issues": issues})
+
+    def _handle_issue_frame(self, query: str) -> None:
+        q = parse_qs(query)
+        issue_id = str(q.get("issue_id", [""])[0]).strip()
+        frame_index_raw = str(q.get("frame_index", [""])[0]).strip()
+        if not issue_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "issue_id is required"},
+            )
+        if not frame_index_raw:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "frame_index is required"},
+            )
+        try:
+            frame_index = int(frame_index_raw)
+            data = self.state.issue_frame(issue_id, frame_index)
+        except Exception as exc:
+            self.state.logger.error(f"issue_frame failed issue_id={issue_id} frame_index={frame_index_raw}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **data})
 
     def _send_json(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
