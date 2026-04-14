@@ -37,7 +37,7 @@ const I18N = {
     toast_no_frame: "当前没有可操作帧",
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
-    toast_recommend_applied: "已根据历史推荐 P1/P2",
+    toast_recommend_applied: "已应用历史推荐",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -59,6 +59,7 @@ const I18N = {
     toast_history_loaded: "已刷新标注记录",
     toast_edit_saved: "修改已保存",
     progress_label: "进度",
+    slots_title: "标注槽位",
     lang_toggle: "EN",
   },
   en: {
@@ -99,7 +100,7 @@ const I18N = {
     toast_no_frame: "No frame loaded",
     toast_ai_not_found: "AI track not found",
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
-    toast_recommend_applied: "Applied historical P1/P2 recommendations",
+    toast_recommend_applied: "Applied historical recommendations",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -121,6 +122,7 @@ const I18N = {
     toast_history_loaded: "History refreshed",
     toast_edit_saved: "Changes saved",
     progress_label: "Progress",
+    slots_title: "Slots",
     lang_toggle: "中",
   },
 };
