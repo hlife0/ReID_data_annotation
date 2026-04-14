@@ -112,6 +112,25 @@ class FrameRecord:
     timestamp_ms: float
 
 
+@dataclass(frozen=True)
+class IssueRecord:
+    issue_id: str
+    video_stem: str
+    severity: str
+    priority_score: float
+    start_frame: int
+    end_frame: int
+    start_timestamp_ms: float
+    end_timestamp_ms: float
+    frame_count: int
+    primary_track_ids: List[int]
+    reason_codes: List[str]
+    min_score: float
+    max_overlap_iou: float
+    max_jump_distance: float
+    imu_count: int
+
+
 class RunLogger:
     def __init__(self, run_log_path: Path, error_log_path: Path) -> None:
         self.run_log_path = run_log_path
@@ -235,6 +254,8 @@ class AnnotationState:
         self.frame_pool: List[FrameRecord] = []
         self.frame_lookup: Dict[Tuple[str, int], FrameRecord] = {}
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, float | int]]] = {}
+        self.issue_pool: List[IssueRecord] = []
+        self.issue_lookup: Dict[str, IssueRecord] = {}
         self.reader: VideoFrameReader | None = None
         self._frame_cache: OrderedDict[Tuple[str, int], bytes] = OrderedDict()
         self._frame_cache_lock = threading.Lock()
@@ -242,6 +263,7 @@ class AnnotationState:
         self._dispatch_queue: deque[Tuple[str, int]] = deque()
         self._dispatch_bucket_count: int | None = None
         self._dispatch_generation = 0
+        self._issue_dispatch_index = 0
 
     def initialize(self) -> None:
         self.ui_task_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +279,8 @@ class AnnotationState:
         self.frame_pool = self._build_frame_pool()
         self.frame_lookup = {(r.video_stem, r.frame_index): r for r in self.frame_pool}
         self.ai_boxes = self._load_ai_boxes()
+        self.issue_pool = self._load_issue_pool()
+        self.issue_lookup = {issue.issue_id: issue for issue in self.issue_pool}
         self._init_review_files()
         self._init_database()
         self._sync_counts_csv_from_db()
@@ -265,6 +289,7 @@ class AnnotationState:
         self._dispatch_queue.clear()
         self._dispatch_bucket_count = None
         self._dispatch_generation = 0
+        self._issue_dispatch_index = 0
         if self.frame_cache_dir is not None:
             self.frame_cache_dir.mkdir(parents=True, exist_ok=True)
             if self.frame_cache_prewarm:
@@ -306,6 +331,15 @@ class AnnotationState:
                 "frame": assignment,
                 "prefetch_frames": prefetch_frames,
             }
+
+    def assign_next_issue(self, annotator_id: str) -> Dict[str, Any]:
+        del annotator_id
+        with self._lock:
+            if not self.issue_pool:
+                raise ValueError("issue pool is empty")
+            issue = self.issue_pool[self._issue_dispatch_index % len(self.issue_pool)]
+            self._issue_dispatch_index += 1
+            return self._issue_payload(issue)
 
     def submit_and_assign_next(
         self,
@@ -641,6 +675,12 @@ class AnnotationState:
             parsed_slots = [empty_slot_record(slot) for slot in SLOT_NAMES]
         annotation["slots"] = parsed_slots
         return {"frame": frame, "annotation": annotation}
+
+    def issue_detail(self, issue_id: str) -> Dict[str, Any]:
+        issue = self.issue_lookup.get(issue_id)
+        if issue is None:
+            raise ValueError("issue not found")
+        return self._issue_payload(issue)
 
     def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         annotation_id = str(payload.get("annotation_id", "")).strip()
@@ -1035,6 +1075,112 @@ class AnnotationState:
         for key, boxes in ai_boxes.items():
             boxes.sort(key=lambda b: (-float(b["score"]), int(b["track_id"])))
         return ai_boxes
+
+    def _load_issue_pool(self) -> List[IssueRecord]:
+        review_prep_dir = self.batch_dir / "review_prep"
+        if not review_prep_dir.exists():
+            return []
+        issues: List[IssueRecord] = []
+        for path in sorted(review_prep_dir.glob("*.issue_pool.csv")):
+            with path.open("r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        issues.append(
+                            IssueRecord(
+                                issue_id=str(row["issue_id"]).strip(),
+                                video_stem=str(row["video_stem"]).strip(),
+                                severity=str(row["severity"]).strip(),
+                                priority_score=_safe_float(row["priority_score"]),
+                                start_frame=int(row["start_frame"]),
+                                end_frame=int(row["end_frame"]),
+                                start_timestamp_ms=_safe_float(row["start_timestamp_ms"]),
+                                end_timestamp_ms=_safe_float(row["end_timestamp_ms"]),
+                                frame_count=int(row["frame_count"]),
+                                primary_track_ids=[
+                                    int(float(v))
+                                    for v in str(row.get("primary_track_ids", "")).split(";")
+                                    if v.strip()
+                                ],
+                                reason_codes=[
+                                    v
+                                    for v in str(row.get("reason_codes", "")).split(";")
+                                    if v.strip()
+                                ],
+                                min_score=_safe_float(row.get("min_score", 0.0)),
+                                max_overlap_iou=_safe_float(row.get("max_overlap_iou", 0.0)),
+                                max_jump_distance=_safe_float(row.get("max_jump_distance", 0.0)),
+                                imu_count=int(float(row.get("imu_count", 0) or 0)),
+                            )
+                        )
+                    except Exception:
+                        continue
+        issues.sort(key=lambda item: (-item.priority_score, item.video_stem, item.start_frame, item.issue_id))
+        return issues
+
+    def _annotation_count_for_frame(self, video_stem: str, frame_index: int) -> int:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT annotation_count
+                FROM frame_counts
+                WHERE video_stem=? AND frame_index=?
+                """,
+                (video_stem, frame_index),
+            ).fetchone()
+            return int(row["annotation_count"]) if row is not None else 0
+        finally:
+            conn.close()
+
+    def _build_frame_payload(self, stem: str, frame_index: int, annotation_count: int) -> Dict[str, Any]:
+        key = (stem, frame_index)
+        if key not in self.frame_lookup:
+            raise ValueError("frame not found in frame pool")
+        if self.reader is None:
+            raise RuntimeError("state not initialized")
+        rec = self.frame_lookup[key]
+        width, height = self.reader.get_dimensions(stem)
+        return {
+            "assignment_id": "",
+            "video_stem": stem,
+            "frame_index": frame_index,
+            "timestamp_ms": _safe_float(rec.timestamp_ms),
+            "annotation_count": annotation_count,
+            "total_frames": len(self.frame_pool),
+            "image_width": width,
+            "image_height": height,
+            "ai_boxes": self.ai_boxes.get(key, []),
+            "recommendations": [],
+            "slot_names": SLOT_NAMES,
+            "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
+        }
+
+    def _issue_payload(self, issue: IssueRecord) -> Dict[str, Any]:
+        focus_frame = issue.start_frame
+        annotation_count = self._annotation_count_for_frame(issue.video_stem, focus_frame)
+        frame = self._build_frame_payload(issue.video_stem, focus_frame, annotation_count)
+        return {
+            "issue": {
+                "issue_id": issue.issue_id,
+                "video_stem": issue.video_stem,
+                "severity": issue.severity,
+                "priority_score": issue.priority_score,
+                "start_frame": issue.start_frame,
+                "end_frame": issue.end_frame,
+                "start_timestamp_ms": issue.start_timestamp_ms,
+                "end_timestamp_ms": issue.end_timestamp_ms,
+                "frame_count": issue.frame_count,
+                "primary_track_ids": issue.primary_track_ids,
+                "reason_codes": issue.reason_codes,
+                "min_score": issue.min_score,
+                "max_overlap_iou": issue.max_overlap_iou,
+                "max_jump_distance": issue.max_jump_distance,
+                "imu_count": issue.imu_count,
+                "focus_frame_index": focus_frame,
+            },
+            "frame": frame,
+        }
 
     def _init_review_files(self) -> None:
         for stem in self.video_stems:
@@ -1482,6 +1628,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_my_annotations(parsed.query)
         if path == "/api/annotation_detail":
             return self._handle_annotation_detail(parsed.query)
+        if path == "/api/issue_detail":
+            return self._handle_issue_detail(parsed.query)
         if path == "/api/frame_image":
             return self._handle_frame_image(parsed.query)
         if path == "/":
@@ -1497,6 +1645,8 @@ class UiHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/api/next_frame":
             return self._handle_next_frame()
+        if path == "/api/next_issue":
+            return self._handle_next_issue()
         if path == "/api/submit":
             return self._handle_submit()
         if path == "/api/update_annotation":
@@ -1539,6 +1689,21 @@ class UiHandler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             self.state.logger.error(f"next frame failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_next_issue(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.assign_next_issue(annotator_id=annotator_id)
+        except Exception as exc:
+            self.state.logger.error(f"next_issue failed annotator={annotator_id}: {exc}")
             return self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"ok": False, "error": str(exc)},
@@ -1655,6 +1820,24 @@ class UiHandler(BaseHTTPRequestHandler):
             self.state.logger.error(
                 f"annotation_detail failed annotator={annotator_id} annotation_id={annotation_id}: {exc}"
             )
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **data})
+
+    def _handle_issue_detail(self, query: str) -> None:
+        q = parse_qs(query)
+        issue_id = str(q.get("issue_id", [""])[0]).strip()
+        if not issue_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "issue_id is required"},
+            )
+        try:
+            data = self.state.issue_detail(issue_id)
+        except Exception as exc:
+            self.state.logger.error(f"issue_detail failed issue_id={issue_id}: {exc}")
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},

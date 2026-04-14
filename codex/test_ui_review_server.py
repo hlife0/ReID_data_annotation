@@ -18,6 +18,7 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.batch_dir = Path(self.tmpdir.name) / "batch"
         (self.batch_dir / "manifests").mkdir(parents=True)
         (self.batch_dir / "pseudo_labels").mkdir(parents=True)
+        (self.batch_dir / "review_prep").mkdir(parents=True)
         (self.batch_dir / "assets").mkdir(parents=True)
         self.video_path = self.batch_dir / "assets" / "sample.mp4"
         self.ts_path = self.batch_dir / "assets" / "sample_frame_timestamps.csv"
@@ -63,6 +64,11 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
                     "pseudo_label_path": str(self.batch_dir / "pseudo_labels" / "sample.auto.csv"),
                 }
             )
+        (self.batch_dir / "review_prep" / "sample.issue_pool.csv").write_text(
+            "issue_id,video_stem,severity,priority_score,start_frame,end_frame,start_timestamp_ms,end_timestamp_ms,frame_count,primary_track_ids,reason_codes,min_score,max_overlap_iou,max_jump_distance,imu_count\n"
+            "sample_issue_001,sample,red,9.500,1,2,1000,1033.333,2,11;12,low_score;high_overlap,0.510,0.670,58.000,3\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         self.tmpdir.cleanup()
@@ -178,6 +184,19 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
             "P1:manual_param(11)",
             state.list_annotations_for_annotator("annotator_a")[0]["slots_summary"],
         )
+
+    def test_issue_pool_loads_and_returns_issue_payloads(self) -> None:
+        state = self._make_state()
+
+        self.assertEqual(len(state.issue_pool), 1)
+        issue_payload = state.assign_next_issue("annotator_issue")
+        self.assertEqual(issue_payload["issue"]["issue_id"], "sample_issue_001")
+        self.assertEqual(issue_payload["issue"]["video_stem"], "sample")
+        self.assertEqual(issue_payload["frame"]["slot_names"], [f"p{i}" for i in range(1, 8)])
+
+        detail = state.issue_detail("sample_issue_001")
+        self.assertEqual(detail["issue"]["issue_id"], "sample_issue_001")
+        self.assertEqual(detail["frame"]["frame_index"], 1)
 
 
 if __name__ == "__main__":
