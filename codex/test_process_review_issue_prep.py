@@ -84,6 +84,39 @@ class ReviewIssuePrepTests(unittest.TestCase):
         self.assertEqual(issue_rows[0]["video_stem"], "sample")
         self.assertIn(issue_rows[0]["severity"], {"yellow", "red"})
 
+    def test_review_prep_adds_green_auto_pass_summary_and_qa_samples(self) -> None:
+        rows = [
+            "video_stem,frame_index,timestamp_ms,track_id,bbox_x,bbox_y,bbox_w,bbox_h,score,class_name,imu_id,source,review_state"
+        ]
+        for frame_index in range(1, 41):
+            score = 0.40 if frame_index == 20 else 0.95
+            rows.append(
+                f"sample,{frame_index},{1000 + frame_index * 33},1,{10 + frame_index},10,20,40,{score},person,unknown,auto,pending"
+            )
+            rows.append(
+                f"sample,{frame_index},{1000 + frame_index * 33},2,{100 - frame_index},12,22,41,{score},person,unknown,auto,pending"
+            )
+        self.pseudo_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+        summary = mod.run_review_issue_prep(batch_dir=self.batch_dir)
+        review_prep_dir = self.batch_dir / "review_prep"
+        risk_spans = json.loads(
+            (review_prep_dir / "sample.risk_spans.json").read_text(encoding="utf-8")
+        )
+        batch_summary = json.loads(
+            (review_prep_dir / "review_prep_summary.json").read_text(encoding="utf-8")
+        )
+        with (review_prep_dir / "sample.issue_pool.csv").open("r", encoding="utf-8") as f:
+            issue_rows = list(csv.DictReader(f))
+
+        self.assertEqual(summary["video_count"], 1)
+        self.assertGreaterEqual(risk_spans["summary"]["severity_counts"].get("green", 0), 1)
+        self.assertGreaterEqual(risk_spans["summary"]["qa_sample_span_count"], 1)
+        self.assertGreaterEqual(batch_summary["severity_counts"].get("green", 0), 1)
+        review_policies = {row["review_policy"] for row in issue_rows}
+        self.assertIn("qa_sample", review_policies)
+        self.assertIn("focus_review", review_policies)
+
 
 if __name__ == "__main__":
     unittest.main()

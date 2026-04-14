@@ -7,6 +7,10 @@ const I18N = {
     metric_annotated_frames: "已被标注帧数",
     metric_total_annotations: "总提交数",
     metric_annotator_count: "Annotator数量",
+    metric_red_spans: "红色问题段",
+    metric_yellow_spans: "黄色问题段",
+    metric_green_spans: "绿色稳定段",
+    metric_qa_samples: "QA 抽样段",
     chart1_title: "Overall 统计图 1：帧被标注次数分布",
     chart1_hint: "展示被标注过 1、2、3、4+ 次的帧数量",
     chart2_title: "Overall 统计图 2：每个 Annotator 标注数量",
@@ -52,6 +56,10 @@ const I18N = {
     metric_annotated_frames: "Annotated Frames",
     metric_total_annotations: "Total Submissions",
     metric_annotator_count: "Annotators",
+    metric_red_spans: "Red Spans",
+    metric_yellow_spans: "Yellow Spans",
+    metric_green_spans: "Green Spans",
+    metric_qa_samples: "QA Samples",
     chart1_title: "Overall Chart 1: Frame Annotation Count Distribution",
     chart1_hint: "Count of frames annotated 1, 2, 3, and 4+ times",
     chart2_title: "Overall Chart 2: Annotations per Annotator",
@@ -98,6 +106,10 @@ const refs = {
   mAnnotatedFrames: document.getElementById("mAnnotatedFrames"),
   mTotalAnnotations: document.getElementById("mTotalAnnotations"),
   mAnnotatorCount: document.getElementById("mAnnotatorCount"),
+  mRedSpans: document.getElementById("mRedSpans"),
+  mYellowSpans: document.getElementById("mYellowSpans"),
+  mGreenSpans: document.getElementById("mGreenSpans"),
+  mQaSamples: document.getElementById("mQaSamples"),
   frameDistChart: document.getElementById("frameDistChart"),
   annotatorChart: document.getElementById("annotatorChart"),
   annotatorBody: document.getElementById("annotatorBody"),
@@ -233,6 +245,10 @@ function renderOverview(overview) {
   refs.mAnnotatedFrames.textContent = overview.annotated_frames;
   refs.mTotalAnnotations.textContent = overview.total_annotations;
   refs.mAnnotatorCount.textContent = overview.unique_annotators;
+  refs.mRedSpans.textContent = overview.risk_summary?.severity_counts?.red ?? 0;
+  refs.mYellowSpans.textContent = overview.risk_summary?.severity_counts?.yellow ?? 0;
+  refs.mGreenSpans.textContent = overview.risk_summary?.severity_counts?.green ?? 0;
+  refs.mQaSamples.textContent = overview.risk_summary?.qa_sample_span_count ?? 0;
 
   const bins = (overview.frame_count_bins || []).map((x) => ({ label: x.label, count: x.count }));
   renderBarChart(refs.frameDistChart, bins, "label", "count");

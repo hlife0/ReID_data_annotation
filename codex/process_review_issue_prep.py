@@ -16,11 +16,14 @@ HIGH_OVERLAP_IOU = 0.25
 LARGE_JUMP_DISTANCE = 40.0
 SEGMENT_EDGE_FRAMES = 15
 SPAN_MERGE_GAP = 2
+GREEN_QA_SAMPLE_RATE = 0.1
 
 ISSUE_POOL_COLUMNS = [
     "issue_id",
     "video_stem",
     "severity",
+    "review_policy",
+    "qa_sampled",
     "priority_score",
     "start_frame",
     "end_frame",
@@ -307,6 +310,96 @@ def priority_for_reasons(reason_codes: set[str], min_score: float, max_overlap_i
     return round(score, 3)
 
 
+def build_green_spans(task: TaskInfo, detections: List[Detection], metrics: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    by_frame = group_by_frame(detections)
+    green_spans: List[Dict[str, Any]] = []
+    current: Dict[str, Any] | None = None
+    for frame_index, items in sorted(by_frame.items()):
+        item = metrics.get(frame_index)
+        if item is None or item["reason_codes"]:
+            if current is not None:
+                green_spans.append(current)
+                current = None
+            continue
+
+        track_ids = {det.track_id for det in items}
+        if current is None or frame_index != current["end_frame"] + 1:
+            if current is not None:
+                green_spans.append(current)
+            current = {
+                "start_frame": frame_index,
+                "end_frame": frame_index,
+                "start_timestamp_ms": item["timestamp_ms"],
+                "end_timestamp_ms": item["timestamp_ms"],
+                "reason_codes": {"stable_segment"},
+                "track_ids": track_ids,
+                "min_score": item["min_score"],
+                "max_overlap_iou": item["max_overlap_iou"],
+                "max_jump_distance": item["max_jump_distance"],
+                "frame_count": 1,
+            }
+            continue
+
+        current["end_frame"] = frame_index
+        current["end_timestamp_ms"] = item["timestamp_ms"]
+        current["track_ids"].update(track_ids)
+        current["min_score"] = min(current["min_score"], item["min_score"])
+        current["max_overlap_iou"] = max(current["max_overlap_iou"], item["max_overlap_iou"])
+        current["max_jump_distance"] = max(current["max_jump_distance"], item["max_jump_distance"])
+        current["frame_count"] += 1
+
+    if current is not None:
+        green_spans.append(current)
+
+    exported: List[Dict[str, Any]] = []
+    for span in green_spans:
+        exported.append(
+            {
+                "issue_id": "",
+                "video_stem": task.video_stem,
+                "severity": "green",
+                "review_policy": "auto_pass",
+                "qa_sampled": False,
+                "priority_score": 0.0,
+                "start_frame": int(span["start_frame"]),
+                "end_frame": int(span["end_frame"]),
+                "start_timestamp_ms": _safe_float(span["start_timestamp_ms"]),
+                "end_timestamp_ms": _safe_float(span["end_timestamp_ms"]),
+                "frame_count": int(span["frame_count"]),
+                "primary_track_ids": sorted(int(v) for v in span["track_ids"]),
+                "reason_codes": ["stable_segment"],
+                "min_score": _safe_float(span["min_score"]),
+                "max_overlap_iou": _safe_float(span["max_overlap_iou"]),
+                "max_jump_distance": _safe_float(span["max_jump_distance"]),
+                "imu_count": len(task.imu_paths),
+            }
+        )
+    return exported
+
+
+def sample_green_spans(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not spans:
+        return []
+    sample_count = max(1, int(round(len(spans) * GREEN_QA_SAMPLE_RATE)))
+    sample_count = min(sample_count, len(spans))
+    if sample_count == 1:
+        indices = {len(spans) // 2}
+    else:
+        indices = {
+            round(i * (len(spans) - 1) / (sample_count - 1))
+            for i in range(sample_count)
+        }
+    sampled: List[Dict[str, Any]] = []
+    for idx, span in enumerate(spans):
+        if idx not in indices:
+            continue
+        copied = dict(span)
+        copied["review_policy"] = "qa_sample"
+        copied["qa_sampled"] = True
+        sampled.append(copied)
+    return sampled
+
+
 def merge_risk_spans(task: TaskInfo, detections: List[Detection]) -> Dict[str, Any]:
     metrics = collect_frame_risk_metrics(detections)
     risk_frames = [
@@ -362,9 +455,11 @@ def merge_risk_spans(task: TaskInfo, detections: List[Detection]) -> Dict[str, A
         reason_codes = set(span["reason_codes"])
         exported_spans.append(
             {
-                "issue_id": f"{task.video_stem}_issue_{idx:03d}",
+                "issue_id": "",
                 "video_stem": task.video_stem,
                 "severity": severity_for_reasons(reason_codes),
+                "review_policy": "focus_review",
+                "qa_sampled": False,
                 "priority_score": priority_for_reasons(
                     reason_codes,
                     float(span["min_score"]),
@@ -385,24 +480,35 @@ def merge_risk_spans(task: TaskInfo, detections: List[Detection]) -> Dict[str, A
             }
         )
 
-    exported_spans.sort(key=lambda item: (-float(item["priority_score"]), int(item["start_frame"])))
-    for idx, span in enumerate(exported_spans, start=1):
+    green_spans = build_green_spans(task, detections, metrics)
+    sampled_green_spans = sample_green_spans(green_spans)
+
+    review_issue_pool = list(exported_spans) + sampled_green_spans
+    review_issue_pool.sort(key=lambda item: (-float(item["priority_score"]), int(item["start_frame"])))
+    for idx, span in enumerate(review_issue_pool, start=1):
         span["issue_id"] = f"{task.video_stem}_issue_{idx:03d}"
 
+    all_spans = list(exported_spans) + green_spans
+    all_spans.sort(key=lambda item: (int(item["start_frame"]), int(item["end_frame"])))
+
     severity_counts: Dict[str, int] = defaultdict(int)
-    for span in exported_spans:
+    for span in all_spans:
         severity_counts[str(span["severity"])] += 1
 
     return {
         "video_stem": task.video_stem,
         "pseudo_label_path": str(task.pseudo_label_path),
         "summary": {
-            "risk_span_count": len(exported_spans),
+            "risk_span_count": len(all_spans),
+            "review_issue_count": len(review_issue_pool),
             "severity_counts": dict(severity_counts),
+            "auto_pass_span_count": max(0, len(green_spans) - len(sampled_green_spans)),
+            "qa_sample_span_count": len(sampled_green_spans),
             "frame_count": len(group_by_frame(detections)),
             "track_count": len(group_by_track(detections)),
         },
-        "risk_spans": exported_spans,
+        "risk_spans": all_spans,
+        "issue_pool": review_issue_pool,
     }
 
 
@@ -416,6 +522,8 @@ def write_issue_pool_csv(path: Path, spans: List[Dict[str, Any]]) -> None:
                     "issue_id": span["issue_id"],
                     "video_stem": span["video_stem"],
                     "severity": span["severity"],
+                    "review_policy": span.get("review_policy", "focus_review"),
+                    "qa_sampled": "1" if span.get("qa_sampled") else "0",
                     "priority_score": f"{float(span['priority_score']):.3f}",
                     "start_frame": int(span["start_frame"]),
                     "end_frame": int(span["end_frame"]),
@@ -442,8 +550,12 @@ def run_review_issue_prep(batch_dir: Path) -> Dict[str, Any]:
         "batch_dir": str(batch_dir),
         "video_count": 0,
         "issue_count": 0,
+        "severity_counts": {},
+        "auto_pass_span_count": 0,
+        "qa_sample_span_count": 0,
         "videos": [],
     }
+    batch_severity_counts: Dict[str, int] = defaultdict(int)
 
     for task in tasks:
         if not task.pseudo_label_path.exists():
@@ -462,19 +574,28 @@ def run_review_issue_prep(batch_dir: Path) -> Dict[str, Any]:
         )
         write_issue_pool_csv(
             review_prep_dir / f"{task.video_stem}.issue_pool.csv",
-            risk_spans["risk_spans"],
+            risk_spans["issue_pool"],
         )
 
         summary["video_count"] += 1
-        summary["issue_count"] += len(risk_spans["risk_spans"])
+        summary["issue_count"] += len(risk_spans["issue_pool"])
+        summary["auto_pass_span_count"] += int(risk_spans["summary"].get("auto_pass_span_count", 0))
+        summary["qa_sample_span_count"] += int(risk_spans["summary"].get("qa_sample_span_count", 0))
+        for key, value in risk_spans["summary"].get("severity_counts", {}).items():
+            batch_severity_counts[str(key)] += int(value or 0)
         summary["videos"].append(
             {
                 "video_stem": task.video_stem,
                 "track_count": track_summary["track_count"],
-                "issue_count": len(risk_spans["risk_spans"]),
+                "issue_count": len(risk_spans["issue_pool"]),
                 "imu_count": len(task.imu_paths),
+                "severity_counts": risk_spans["summary"].get("severity_counts", {}),
+                "auto_pass_span_count": int(risk_spans["summary"].get("auto_pass_span_count", 0)),
+                "qa_sample_span_count": int(risk_spans["summary"].get("qa_sample_span_count", 0)),
             }
         )
+
+    summary["severity_counts"] = dict(batch_severity_counts)
 
     (review_prep_dir / "review_prep_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),

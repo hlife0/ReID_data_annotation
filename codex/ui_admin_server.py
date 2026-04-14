@@ -84,6 +84,36 @@ class AdminState:
             error_log_path=self.logs_dir / "errors.log",
         )
 
+    def _load_review_prep_summary(self) -> Dict[str, Any]:
+        path = self.batch_dir / "review_prep" / "review_prep_summary.json"
+        if not path.exists():
+            return {
+                "severity_counts": {"red": 0, "yellow": 0, "green": 0},
+                "auto_pass_span_count": 0,
+                "qa_sample_span_count": 0,
+                "issue_count": 0,
+            }
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {
+                "severity_counts": {"red": 0, "yellow": 0, "green": 0},
+                "auto_pass_span_count": 0,
+                "qa_sample_span_count": 0,
+                "issue_count": 0,
+            }
+        severity_counts = payload.get("severity_counts", {}) if isinstance(payload, dict) else {}
+        return {
+            "severity_counts": {
+                "red": int(severity_counts.get("red", 0) or 0),
+                "yellow": int(severity_counts.get("yellow", 0) or 0),
+                "green": int(severity_counts.get("green", 0) or 0),
+            },
+            "auto_pass_span_count": int(payload.get("auto_pass_span_count", 0) or 0),
+            "qa_sample_span_count": int(payload.get("qa_sample_span_count", 0) or 0),
+            "issue_count": int(payload.get("issue_count", 0) or 0),
+        }
+
     def initialize(self) -> None:
         if not self.db_path.exists():
             raise FileNotFoundError(
@@ -147,12 +177,14 @@ class AdminState:
             ).fetchall()
         finally:
             conn.close()
+        risk_summary = self._load_review_prep_summary()
 
         return {
             "total_frames": int(row["total_frames"] or 0),
             "annotated_frames": int(row["annotated_frames"] or 0),
             "total_annotations": int(total_annotations or 0),
             "unique_annotators": int(unique_annotators or 0),
+            "risk_summary": risk_summary,
             "frame_count_bins": [
                 {"label": "1", "count": int(row["bin_1"] or 0)},
                 {"label": "2", "count": int(row["bin_2"] or 0)},

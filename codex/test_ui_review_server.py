@@ -200,6 +200,10 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertEqual(issue_payload["issue"]["issue_id"], "sample_issue_001")
         self.assertEqual(issue_payload["issue"]["video_stem"], "sample")
         self.assertEqual(issue_payload["frame"]["slot_names"], [f"p{i}" for i in range(1, 8)])
+        self.assertEqual(
+            [item["track_id"] for item in issue_payload["issue"]["issue_tracks"]],
+            [11, 12],
+        )
 
         detail = state.issue_detail("sample_issue_001")
         self.assertEqual(detail["issue"]["issue_id"], "sample_issue_001")
@@ -492,6 +496,143 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertEqual(result["submitted_frame_count"], 2)
         history = state.list_annotations_for_annotator("annotator_issue_interp")
         self.assertEqual(len(history), 2)
+
+
+class IssuePropagationWorkflowTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.batch_dir = Path(self.tmpdir.name) / "batch"
+        (self.batch_dir / "manifests").mkdir(parents=True)
+        (self.batch_dir / "pseudo_labels").mkdir(parents=True)
+        (self.batch_dir / "review_prep").mkdir(parents=True)
+        (self.batch_dir / "assets").mkdir(parents=True)
+        self.video_path = self.batch_dir / "assets" / "sample.mp4"
+        self.ts_path = self.batch_dir / "assets" / "sample_frame_timestamps.csv"
+        self._write_video(self.video_path)
+        self.ts_path.write_text(
+            "frame_index,timestamp_ms\n1,1000\n2,1033.333\n3,1066.667\n4,1100\n",
+            encoding="utf-8",
+        )
+        (self.batch_dir / "pseudo_labels" / "sample.auto.csv").write_text(
+            "video_stem,frame_index,timestamp_ms,track_id,bbox_x,bbox_y,bbox_w,bbox_h,score\n"
+            "sample,1,1000,11,10,20,30,40,0.95\n"
+            "sample,2,1033.333,11,30,20,32,40,0.94\n"
+            "sample,3,1066.667,11,35,20,34,40,0.93\n"
+            "sample,3,1066.667,21,80,18,33,41,0.92\n"
+            "sample,4,1100,21,96,18,34,42,0.91\n",
+            encoding="utf-8",
+        )
+        with (self.batch_dir / "manifests" / "annotation_tasks.csv").open(
+            "w",
+            newline="",
+            encoding="utf-8",
+        ) as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "video_stem",
+                    "task_status",
+                    "status_reason",
+                    "video_path",
+                    "timestamp_path",
+                    "imu_count",
+                    "imu_paths",
+                    "pseudo_label_path",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "video_stem": "sample",
+                    "task_status": "todo",
+                    "status_reason": "",
+                    "video_path": str(self.video_path),
+                    "timestamp_path": str(self.ts_path),
+                    "imu_count": "2",
+                    "imu_paths": "imu_a.csv;imu_b.csv",
+                    "pseudo_label_path": str(self.batch_dir / "pseudo_labels" / "sample.auto.csv"),
+                }
+            )
+        (self.batch_dir / "review_prep" / "sample.issue_pool.csv").write_text(
+            "issue_id,video_stem,severity,priority_score,start_frame,end_frame,start_timestamp_ms,end_timestamp_ms,frame_count,primary_track_ids,reason_codes,min_score,max_overlap_iou,max_jump_distance,imu_count\n"
+            "sample_issue_001,sample,red,9.500,1,3,1000,1066.667,3,11;21,low_score;high_overlap,0.510,0.670,58.000,2\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def _write_video(self, path: Path) -> None:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(path), fourcc, 30.0, (160, 120))
+        self.assertTrue(writer.isOpened())
+        for _ in range(4):
+            frame = np.full((120, 160, 3), 180, dtype=np.uint8)
+            writer.write(frame)
+        writer.release()
+
+    def _make_state(self) -> mod.AnnotationState:
+        state = mod.AnnotationState(
+            batch_dir=self.batch_dir,
+            static_dir=Path("codex/ui_review_web"),
+            seed=123,
+            reset_storage=True,
+            frame_cache_dir=None,
+            frame_cache_prewarm=False,
+            frame_cache_max=0,
+            frame_cache_quality=88,
+        )
+        state.initialize()
+        return state
+
+    def test_issue_propagation_submit_writes_ai_followed_manual_range(self) -> None:
+        state = self._make_state()
+        result = state.submit_issue_propagation(
+            "annotator_issue_propagation",
+            "sample_issue_001",
+            keyframes=[
+                {
+                    "frame_index": 1,
+                    "slots": [
+                        {
+                            "slot": "p1",
+                            "bbox_x": 20,
+                            "bbox_y": 25,
+                            "bbox_w": 35,
+                            "bbox_h": 45,
+                            "source": "manual_param",
+                            "ai_track_id": "11",
+                        }
+                    ],
+                },
+                {
+                    "frame_index": 3,
+                    "slots": [
+                        {
+                            "slot": "p1",
+                            "bbox_x": 38,
+                            "bbox_y": 24,
+                            "bbox_w": 37,
+                            "bbox_h": 45,
+                            "source": "manual_param",
+                            "ai_track_id": "11",
+                        }
+                    ],
+                },
+            ],
+        )
+        self.assertEqual(result["submitted_frame_count"], 3)
+        history = state.list_annotations_for_annotator("annotator_issue_propagation")
+        self.assertEqual(len(history), 3)
+        details = [
+            state.annotation_detail("annotator_issue_propagation", item["annotation_id"])
+            for item in history
+        ]
+        by_frame = {item["frame"]["frame_index"]: item for item in details}
+        self.assertEqual(by_frame[1]["annotation"]["slots"][0]["bbox_x"], 20.0)
+        self.assertAlmostEqual(by_frame[2]["annotation"]["slots"][0]["bbox_x"], 36.5, places=3)
+        self.assertEqual(by_frame[3]["annotation"]["slots"][0]["bbox_x"], 38.0)
+        self.assertEqual(by_frame[2]["annotation"]["slots"][0]["ai_track_id"], "11")
 
 
 if __name__ == "__main__":

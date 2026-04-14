@@ -200,6 +200,10 @@ select {
   background: #9b7a1d;
 }
 
+.issue-badge.green {
+  background: #1d9a58;
+}
+
 .issue-id-text {
   font-weight: 700;
   color: var(--text);
@@ -244,6 +248,10 @@ select {
 
 .issue-timeline-bar.yellow {
   background: rgba(155, 122, 29, 0.78);
+}
+
+.issue-timeline-bar.green {
+  background: rgba(29, 154, 88, 0.78);
 }
 
 .issue-timeline-bar.active {
@@ -536,6 +544,10 @@ select {
   border-left-color: #9b7a1d;
 }
 
+.issue-list-item.green {
+  border-left-color: #1d9a58;
+}
+
 .issue-list-item.active {
   box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.14);
 }
@@ -552,6 +564,117 @@ select {
 .issue-list-item-meta {
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.trajectory-panel {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(248, 252, 255, 0.92);
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  box-shadow: var(--shadow);
+}
+
+.trajectory-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trajectory-cards {
+  display: grid;
+  gap: 6px;
+}
+
+.trajectory-card {
+  border: 1px solid rgba(30, 50, 70, 0.15);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 7px;
+  display: grid;
+  gap: 4px;
+}
+
+.trajectory-card.active {
+  box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.14);
+}
+
+.trajectory-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.77rem;
+  font-weight: 700;
+}
+
+.trajectory-card-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.trajectory-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.trajectory-card-actions .btn {
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+
+.keyframe-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.keyframe-list {
+  display: grid;
+  gap: 6px;
+}
+
+.keyframe-item {
+  border: 1px solid rgba(30, 50, 70, 0.15);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 6px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.keyframe-item.active {
+  box-shadow: 0 0 0 2px rgba(29, 154, 88, 0.16);
+}
+
+.keyframe-item-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.keyframe-item-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.keyframe-item-subtitle {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.keyframe-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.keyframe-item-actions .btn {
+  padding: 5px 8px;
+  font-size: 0.7rem;
 }
 
 .slot-stack {

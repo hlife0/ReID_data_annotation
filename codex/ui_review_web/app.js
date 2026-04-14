@@ -18,13 +18,19 @@ const I18N = {
     manual_draw: "手动画框",
     draw_new_box: "绘制新框",
     mark_absent: "不存在",
-    set_keyframe_anchor: "设为关键帧起点",
-    submit_interpolation: "插值到当前帧",
+    save_keyframe: "记录关键帧",
+    remove_keyframe: "移除当前关键帧",
+    clear_keyframes: "清空关键帧",
+    submit_propagation: "智能传播整段",
     submit_issue_backward: "从当前帧向前应用",
     submit_issue_forward: "从当前帧向后应用",
     submit_issue_range: "整段应用",
     mark_occluded: "遮挡",
     mark_outside: "出画",
+    split_track: "切断轨迹",
+    mark_reappear: "重新出现",
+    trajectory_title: "轨迹工作台",
+    keyframe_title: "关键帧",
     src_not_set: "未设置",
     src_ai: "AI",
     src_manual_draw: "手动画框",
@@ -50,10 +56,26 @@ const I18N = {
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
     toast_recommend_applied: "已应用历史推荐",
+    toast_keyframe_saved: "已记录关键帧 #{frame}",
+    toast_keyframe_removed: "已移除关键帧 #{frame}",
+    toast_keyframes_cleared: "已清空当前问题的关键帧",
+    toast_propagated: "已智能传播 {count} 帧",
+    toast_split_track: "{slot} 已从当前 AI 轨迹切断",
+    toast_reappear_marked: "{slot} 已记录为重新出现关键帧",
+    toast_track_merged: "{slot} 已并入 AI track {track}",
     issue_none: "当前未加载问题点",
     issue_list_title: "问题列表",
     issue_range: "范围 #{start} - #{end}",
     issue_tracks: "轨迹 {tracks}",
+    imu_conflict_hint: "IMU 提示：本段有 {count} 个活跃设备，仅在人数/身份冲突时参考",
+    keyframe_empty: "当前问题还没有关键帧",
+    trajectory_empty: "当前问题没有轨迹卡片",
+    keyframe_label: "关键帧 #{frame}",
+    keyframe_sources: "{count} 个槽位已记录",
+    track_range: "可见范围 #{start} - #{end}",
+    track_stats: "min_score {min} | jump {jump}",
+    track_jump: "跳到轨迹",
+    track_merge: "并到当前槽",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -97,13 +119,19 @@ const I18N = {
     manual_draw: "Manual draw",
     draw_new_box: "Draw New Box",
     mark_absent: "Mark Missing",
-    set_keyframe_anchor: "Set Keyframe Start",
-    submit_interpolation: "Interpolate To Here",
+    save_keyframe: "Save Keyframe",
+    remove_keyframe: "Remove Keyframe",
+    clear_keyframes: "Clear Keyframes",
+    submit_propagation: "Propagate Issue",
     submit_issue_backward: "Apply Backward",
     submit_issue_forward: "Apply Forward",
     submit_issue_range: "Apply To Issue",
     mark_occluded: "Occluded",
     mark_outside: "Outside",
+    split_track: "Split Track",
+    mark_reappear: "Reappear",
+    trajectory_title: "Trajectory Workbench",
+    keyframe_title: "Keyframes",
     src_not_set: "not_set",
     src_ai: "ai",
     src_manual_draw: "manual_draw",
@@ -129,10 +157,26 @@ const I18N = {
     toast_ai_not_found: "AI track not found",
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
     toast_recommend_applied: "Applied historical recommendations",
+    toast_keyframe_saved: "Saved keyframe #{frame}",
+    toast_keyframe_removed: "Removed keyframe #{frame}",
+    toast_keyframes_cleared: "Cleared keyframes for this issue",
+    toast_propagated: "Propagated {count} frames",
+    toast_split_track: "{slot} detached from current AI track",
+    toast_reappear_marked: "{slot} marked as reappear keyframe",
+    toast_track_merged: "{slot} merged with AI track {track}",
     issue_none: "No issue loaded",
     issue_list_title: "Issue List",
     issue_range: "Range #{start} - #{end}",
     issue_tracks: "Tracks {tracks}",
+    imu_conflict_hint: "IMU hint: {count} active devices in this segment, use only for identity/count conflicts",
+    keyframe_empty: "No keyframes yet for this issue",
+    trajectory_empty: "No issue tracks available",
+    keyframe_label: "Keyframe #{frame}",
+    keyframe_sources: "{count} slots saved",
+    track_range: "Visible #{start} - #{end}",
+    track_stats: "min_score {min} | jump {jump}",
+    track_jump: "Jump",
+    track_merge: "Merge",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -198,6 +242,7 @@ const state = {
   currentIssue: null,
   issues: [],
   issueListVideoStem: "",
+  issueKeyframes: [],
   keyframeAnchor: null,
   dispatchMode: "frame",
   progressTarget: 4000,
@@ -224,11 +269,17 @@ const refs = {
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
   activeOccludedBtn: document.getElementById("activeOccludedBtn"),
   activeOutsideBtn: document.getElementById("activeOutsideBtn"),
+  splitTrackBtn: document.getElementById("splitTrackBtn"),
+  reappearSlotBtn: document.getElementById("reappearSlotBtn"),
   setKeyframeAnchorBtn: document.getElementById("setKeyframeAnchorBtn"),
   submitInterpolationBtn: document.getElementById("submitInterpolationBtn"),
   submitIssueBackwardBtn: document.getElementById("submitIssueBackwardBtn"),
   submitIssueForwardBtn: document.getElementById("submitIssueForwardBtn"),
   submitIssueRangeBtn: document.getElementById("submitIssueRangeBtn"),
+  removeCurrentKeyframeBtn: document.getElementById("removeCurrentKeyframeBtn"),
+  clearKeyframesBtn: document.getElementById("clearKeyframesBtn"),
+  trajectoryCards: document.getElementById("trajectoryCards"),
+  keyframeList: document.getElementById("keyframeList"),
   activeX: document.getElementById("activeX"),
   activeY: document.getElementById("activeY"),
   activeW: document.getElementById("activeW"),
@@ -400,6 +451,18 @@ function updateActionLabels() {
   }
   if (refs.submitInterpolationBtn) {
     refs.submitInterpolationBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.splitTrackBtn) {
+    refs.splitTrackBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.reappearSlotBtn) {
+    refs.reappearSlotBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.removeCurrentKeyframeBtn) {
+    refs.removeCurrentKeyframeBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.clearKeyframesBtn) {
+    refs.clearKeyframesBtn.hidden = state.dispatchMode !== "issue";
   }
 }
 
@@ -637,6 +700,8 @@ function renderIssueSummary() {
   const issue = state.currentIssue;
   if (!issue) {
     refs.issueSummary.hidden = true;
+    renderTrajectoryCards();
+    renderKeyframeList();
     updateActionLabels();
     return;
   }
@@ -666,7 +731,18 @@ function renderIssueSummary() {
     pill.textContent = reason;
     refs.issueReasonList.appendChild(pill);
   }
+  if (
+    Number(issue.imu_count || 0) > 0
+    && reasons.some((reason) => ["count_change", "track_boundary"].includes(reason))
+  ) {
+    const pill = document.createElement("span");
+    pill.className = "issue-reason-pill";
+    pill.textContent = t("imu_conflict_hint", { count: issue.imu_count });
+    refs.issueReasonList.appendChild(pill);
+  }
   updateActionLabels();
+  renderTrajectoryCards();
+  renderKeyframeList();
 }
 
 function renderIssueList() {
@@ -732,6 +808,210 @@ function renderIssueTimeline() {
   }
 }
 
+function issueTrackItems() {
+  if (!state.currentIssue) {
+    return [];
+  }
+  if (Array.isArray(state.currentIssue.issue_tracks) && state.currentIssue.issue_tracks.length) {
+    return state.currentIssue.issue_tracks;
+  }
+  return (state.currentIssue.primary_track_ids || []).map((trackId) => ({
+    track_id: trackId,
+    visible_start_frame: state.currentIssue.start_frame,
+    visible_end_frame: state.currentIssue.end_frame,
+    min_score: 0,
+    max_jump_distance: 0,
+  }));
+}
+
+function sortIssueKeyframes() {
+  state.issueKeyframes.sort((a, b) => a.frameIndex - b.frameIndex);
+}
+
+function findIssueKeyframe(frameIndex) {
+  return state.issueKeyframes.find((item) => item.frameIndex === Number(frameIndex)) || null;
+}
+
+function upsertCurrentKeyframe(options = {}) {
+  const { silent = false } = options;
+  if (!state.currentIssue || !state.frame) {
+    return false;
+  }
+  const entry = {
+    frameIndex: Number(state.frame.frame_index),
+    slots: cloneCurrentSlots(),
+  };
+  const existing = findIssueKeyframe(entry.frameIndex);
+  if (existing) {
+    existing.slots = entry.slots;
+  } else {
+    state.issueKeyframes.push(entry);
+  }
+  sortIssueKeyframes();
+  renderKeyframeList();
+  if (!silent) {
+    showToastKey("toast_keyframe_saved", { frame: entry.frameIndex });
+  }
+  return true;
+}
+
+function removeKeyframeByFrame(frameIndex, options = {}) {
+  const { silent = false } = options;
+  const normalized = Number(frameIndex);
+  const before = state.issueKeyframes.length;
+  state.issueKeyframes = state.issueKeyframes.filter((item) => item.frameIndex !== normalized);
+  renderKeyframeList();
+  if (!silent && before !== state.issueKeyframes.length) {
+    showToastKey("toast_keyframe_removed", { frame: normalized });
+  }
+}
+
+function removeCurrentKeyframe() {
+  if (!state.currentIssue || !state.frame) {
+    return;
+  }
+  removeKeyframeByFrame(state.frame.frame_index);
+}
+
+function clearIssueKeyframes() {
+  state.issueKeyframes = [];
+  renderKeyframeList();
+  showToastKey("toast_keyframes_cleared");
+}
+
+function renderKeyframeList() {
+  if (!refs.keyframeList) return;
+  refs.keyframeList.innerHTML = "";
+  if (!state.currentIssue || state.issueKeyframes.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "keyframe-item";
+    empty.textContent = t("keyframe_empty");
+    refs.keyframeList.appendChild(empty);
+    return;
+  }
+  for (const item of state.issueKeyframes) {
+    const row = document.createElement("div");
+    row.className = "keyframe-item";
+    if (Number(state.frame?.frame_index) === item.frameIndex) {
+      row.classList.add("active");
+    }
+    row.innerHTML = `
+      <div class="keyframe-item-meta">
+        <div class="keyframe-item-title">${t("keyframe_label", { frame: item.frameIndex })}</div>
+        <div class="keyframe-item-subtitle">${t("keyframe_sources", {
+          count: item.slots.filter((slot) => slot.source !== "not_set").length,
+        })}</div>
+      </div>
+      <div class="keyframe-item-actions">
+        <button type="button" class="btn subtle" data-action="jump">${t("track_jump")}</button>
+        <button type="button" class="btn subtle" data-action="remove">${t("remove_keyframe")}</button>
+      </div>
+    `;
+    row.querySelector('[data-action="jump"]').addEventListener("click", () => {
+      loadIssueFrame(state.currentIssue.issue_id, item.frameIndex);
+    });
+    row.querySelector('[data-action="remove"]').addEventListener("click", () => {
+      removeKeyframeByFrame(item.frameIndex);
+    });
+    refs.keyframeList.appendChild(row);
+  }
+}
+
+function jumpToTrack(track) {
+  if (!state.currentIssue) {
+    return;
+  }
+  const start = Number(track.visible_start_frame || state.currentIssue.start_frame);
+  const end = Number(track.visible_end_frame || state.currentIssue.end_frame);
+  let target = Number(state.frame?.frame_index || start);
+  if (target < start || target > end) {
+    target = start;
+  }
+  loadIssueFrame(state.currentIssue.issue_id, target);
+}
+
+function mergeTrackIntoActiveSlot(trackId) {
+  if (!state.currentIssue || !state.frame) {
+    return;
+  }
+  const normalized = String(trackId);
+  if (!state.aiByTrack.has(normalized)) {
+    showToastKey("toast_ai_not_found", {}, true);
+    return;
+  }
+  applyAiToSlot(state.activeSlot, normalized);
+  upsertCurrentKeyframe({ silent: true });
+  showToastKey("toast_track_merged", { slot: slotName(state.activeSlot), track: normalized });
+}
+
+function splitActiveTrack() {
+  const person = state.slots[state.activeSlot];
+  if (!person || !bboxValid(person.bbox)) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  setSlotBbox(
+    state.activeSlot,
+    { x: person.bbox.x, y: person.bbox.y, w: person.bbox.w, h: person.bbox.h },
+    "manual_param",
+    ""
+  );
+  upsertCurrentKeyframe({ silent: true });
+  showToastKey("toast_split_track", { slot: slotName(state.activeSlot) });
+}
+
+function markReappearKeyframe() {
+  const person = state.slots[state.activeSlot];
+  if (!person || !bboxValid(person.bbox)) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  upsertCurrentKeyframe({ silent: true });
+  showToastKey("toast_reappear_marked", { slot: slotName(state.activeSlot) });
+}
+
+function renderTrajectoryCards() {
+  if (!refs.trajectoryCards) return;
+  refs.trajectoryCards.innerHTML = "";
+  const tracks = issueTrackItems();
+  if (!state.currentIssue || tracks.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "trajectory-card";
+    empty.textContent = t("trajectory_empty");
+    refs.trajectoryCards.appendChild(empty);
+    return;
+  }
+  for (const track of tracks) {
+    const trackId = String(track.track_id);
+    const visibleNow = state.aiByTrack.has(trackId);
+    const start = Number(track.visible_start_frame || state.currentIssue.start_frame);
+    const end = Number(track.visible_end_frame || state.currentIssue.end_frame);
+    const row = document.createElement("div");
+    row.className = "trajectory-card";
+    if (visibleNow) {
+      row.classList.add("active");
+    }
+    row.innerHTML = `
+      <div class="trajectory-card-top">
+        <span>track ${trackId}</span>
+        <span>${visibleNow ? "ACTIVE" : ""}</span>
+      </div>
+      <div class="trajectory-card-meta">${t("track_range", { start, end })}</div>
+      <div class="trajectory-card-meta">${t("track_stats", {
+        min: Number(track.min_score || 0).toFixed(3),
+        jump: Number(track.max_jump_distance || 0).toFixed(3),
+      })}</div>
+      <div class="trajectory-card-actions">
+        <button type="button" class="btn subtle" data-action="jump">${t("track_jump")}</button>
+        <button type="button" class="btn subtle" data-action="merge" ${visibleNow ? "" : "disabled"}>${t("track_merge")}</button>
+      </div>
+    `;
+    row.querySelector('[data-action="jump"]').addEventListener("click", () => jumpToTrack(track));
+    row.querySelector('[data-action="merge"]').addEventListener("click", () => mergeTrackIntoActiveSlot(trackId));
+    refs.trajectoryCards.appendChild(row);
+  }
+}
+
 function resetSlots() {
   state.slots = {};
   const names = Array.isArray(state.frame?.slot_names) && state.frame.slot_names.length
@@ -773,6 +1053,7 @@ function applyFrame(frame, options = {}) {
   renderIssueSummary();
   renderIssueList();
   renderIssueTimeline();
+  renderTrajectoryCards();
   updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
@@ -781,8 +1062,12 @@ function applyFrame(frame, options = {}) {
 }
 
 function applyIssuePayload(payload, options = {}) {
+  const prevIssueId = state.currentIssue?.issue_id || "";
   state.dispatchMode = "issue";
   state.currentIssue = payload.issue || null;
+  if ((state.currentIssue?.issue_id || "") !== prevIssueId) {
+    state.issueKeyframes = [];
+  }
   if (options.isAssignment) {
     state.lastAssignmentIssue = state.currentIssue;
   }
@@ -1494,24 +1779,12 @@ function cloneCurrentSlots() {
 }
 
 function setKeyframeAnchor() {
-  if (!state.currentIssue || !state.frame) {
-    return;
-  }
-  state.keyframeAnchor = {
-    issueId: state.currentIssue.issue_id,
-    frameIndex: state.frame.frame_index,
-    slots: cloneCurrentSlots(),
-  };
-  showToast("已记录关键帧起点");
+  upsertCurrentKeyframe();
 }
 
 async function submitInterpolation() {
-  if (!state.currentIssue || !state.frame || !state.keyframeAnchor) {
-    showToast("请先设置关键帧起点", true);
-    return;
-  }
-  if (state.keyframeAnchor.issueId !== state.currentIssue.issue_id) {
-    showToast("关键帧起点不属于当前问题", true);
+  if (!state.currentIssue || !state.frame) {
+    showToastKey("toast_no_frame", {}, true);
     return;
   }
   try {
@@ -1520,17 +1793,24 @@ async function submitInterpolation() {
     showToast(err.message, true);
     return;
   }
+  if (!findIssueKeyframe(state.frame.frame_index)) {
+    upsertCurrentKeyframe({ silent: true });
+  }
+  if (state.issueKeyframes.length === 0) {
+    showToastKey("keyframe_empty", {}, true);
+    return;
+  }
   if (refs.submitInterpolationBtn) {
     refs.submitInterpolationBtn.disabled = true;
   }
   try {
-    const result = await postJson("/api/submit_issue_interpolation", {
+    const result = await postJson("/api/submit_issue_propagation", {
       annotator_id: annotatorId(),
       issue_id: state.currentIssue.issue_id,
-      start_frame: state.keyframeAnchor.frameIndex,
-      end_frame: state.frame.frame_index,
-      start_slots: state.keyframeAnchor.slots,
-      end_slots: cloneCurrentSlots(),
+      keyframes: state.issueKeyframes.map((item) => ({
+        frame_index: item.frameIndex,
+        slots: item.slots,
+      })),
     });
     if (result.next_issue) {
       applyIssuePayload(result.next_issue, { isAssignment: true });
@@ -1539,8 +1819,9 @@ async function submitInterpolation() {
       loadIssues({ silent: true });
     }
     loadHistory({ silent: true });
-    state.keyframeAnchor = null;
-    showToast(`已插值应用 ${result.submitted_frame_count} 帧`);
+    state.issueKeyframes = [];
+    renderKeyframeList();
+    showToastKey("toast_propagated", { count: result.submitted_frame_count });
   } catch (err) {
     showToast(err.message, true);
   } finally {
@@ -1773,12 +2054,18 @@ function initEvents() {
   if (refs.activeOutsideBtn) {
     refs.activeOutsideBtn.addEventListener("click", () => markSlotState(state.activeSlot, "outside"));
   }
+  if (refs.splitTrackBtn) {
+    refs.splitTrackBtn.addEventListener("click", splitActiveTrack);
+  }
+  if (refs.reappearSlotBtn) {
+    refs.reappearSlotBtn.addEventListener("click", markReappearKeyframe);
+  }
   if (refs.setKeyframeAnchorBtn) {
-    refs.setKeyframeAnchorBtn.textContent = t("set_keyframe_anchor");
+    refs.setKeyframeAnchorBtn.textContent = t("save_keyframe");
     refs.setKeyframeAnchorBtn.addEventListener("click", setKeyframeAnchor);
   }
   if (refs.submitInterpolationBtn) {
-    refs.submitInterpolationBtn.textContent = t("submit_interpolation");
+    refs.submitInterpolationBtn.textContent = t("submit_propagation");
     refs.submitInterpolationBtn.addEventListener("click", submitInterpolation);
   }
   if (refs.submitIssueBackwardBtn) {
@@ -1791,6 +2078,12 @@ function initEvents() {
   }
   if (refs.submitIssueRangeBtn) {
     refs.submitIssueRangeBtn.addEventListener("click", submitIssueRange);
+  }
+  if (refs.removeCurrentKeyframeBtn) {
+    refs.removeCurrentKeyframeBtn.addEventListener("click", removeCurrentKeyframe);
+  }
+  if (refs.clearKeyframesBtn) {
+    refs.clearKeyframesBtn.addEventListener("click", clearIssueKeyframes);
   }
 
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
