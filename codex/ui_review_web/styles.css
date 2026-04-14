@@ -219,6 +219,37 @@ select {
   gap: 6px;
 }
 
+.issue-timeline {
+  position: relative;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(30, 50, 70, 0.12);
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(242,245,248,0.92));
+  overflow: hidden;
+}
+
+.issue-timeline-bar {
+  position: absolute;
+  top: 7px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 50, 70, 0.14);
+  background: rgba(155, 122, 29, 0.78);
+  cursor: pointer;
+}
+
+.issue-timeline-bar.red {
+  background: rgba(170, 60, 42, 0.78);
+}
+
+.issue-timeline-bar.yellow {
+  background: rgba(155, 122, 29, 0.78);
+}
+
+.issue-timeline-bar.active {
+  box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.2);
+}
+
 .issue-reason-pill {
   border-radius: 999px;
   border: 1px solid rgba(30, 50, 70, 0.16);

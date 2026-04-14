@@ -179,6 +179,7 @@ const state = {
   lastAssignmentIssue: null,
   currentIssue: null,
   issues: [],
+  issueListVideoStem: "",
   dispatchMode: "frame",
   progressTarget: 4000,
 };
@@ -225,6 +226,7 @@ const refs = {
   issueRangeText: document.getElementById("issueRangeText"),
   issueTrackText: document.getElementById("issueTrackText"),
   issueReasonList: document.getElementById("issueReasonList"),
+  issueTimeline: document.getElementById("issueTimeline"),
   issueListBody: document.getElementById("issueListBody"),
   refreshIssuesBtn: document.getElementById("refreshIssuesBtn"),
 };
@@ -647,6 +649,36 @@ function renderIssueList() {
   }
 }
 
+function renderIssueTimeline() {
+  if (!refs.issueTimeline) return;
+  refs.issueTimeline.innerHTML = "";
+  const issues = Array.isArray(state.issues) ? state.issues : [];
+  if (issues.length === 0) {
+    return;
+  }
+  const minFrame = Math.min(...issues.map((issue) => Number(issue.start_frame)));
+  const maxFrame = Math.max(...issues.map((issue) => Number(issue.end_frame)));
+  const span = Math.max(1, maxFrame - minFrame + 1);
+
+  for (const issue of issues) {
+    const start = Number(issue.start_frame);
+    const end = Number(issue.end_frame);
+    const left = ((start - minFrame) / span) * 100;
+    const width = Math.max(1.2, ((end - start + 1) / span) * 100);
+    const bar = document.createElement("button");
+    bar.type = "button";
+    bar.className = `issue-timeline-bar ${String(issue.severity || "").toLowerCase()}`;
+    if (state.currentIssue && issue.issue_id === state.currentIssue.issue_id) {
+      bar.classList.add("active");
+    }
+    bar.style.left = `${left}%`;
+    bar.style.width = `${width}%`;
+    bar.title = `${issue.issue_id} | #${issue.start_frame}-#${issue.end_frame}`;
+    bar.addEventListener("click", () => loadIssueDetail(issue.issue_id));
+    refs.issueTimeline.appendChild(bar);
+  }
+}
+
 function resetSlots() {
   state.slots = {};
   const names = Array.isArray(state.frame?.slot_names) && state.frame.slot_names.length
@@ -687,6 +719,7 @@ function applyFrame(frame, options = {}) {
   syncHeader();
   renderIssueSummary();
   renderIssueList();
+  renderIssueTimeline();
   updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
@@ -1179,11 +1212,22 @@ async function requestNextIssue() {
 }
 
 async function loadIssues(options = {}) {
-  const { silent = false } = options;
+  const { silent = false, videoStem = undefined } = options;
   try {
-    const payload = await getJson("/api/issues?limit=40");
+    const effectiveStem =
+      videoStem !== undefined
+        ? videoStem
+        : (state.currentIssue?.video_stem || state.frame?.video_stem || "");
+    const query = new URLSearchParams();
+    query.set("limit", "80");
+    if (effectiveStem) {
+      query.set("video_stem", effectiveStem);
+    }
+    const payload = await getJson(`/api/issues?${query.toString()}`);
     state.issues = payload.issues || [];
+    state.issueListVideoStem = effectiveStem || "";
     renderIssueList();
+    renderIssueTimeline();
     if (!silent) {
       showToastKey("toast_loaded_issue");
     }
@@ -1197,6 +1241,7 @@ async function loadIssueDetail(issueId) {
     const payload = await getJson(`/api/issue_detail?issue_id=${encodeURIComponent(issueId)}`);
     exitEditMode();
     applyIssuePayload(payload, { isAssignment: true });
+    loadIssues({ silent: true, videoStem: payload.issue?.video_stem || "" });
   } catch (err) {
     showToast(err.message, true);
   }
