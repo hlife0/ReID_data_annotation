@@ -30,7 +30,10 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         (self.batch_dir / "pseudo_labels" / "sample.auto.csv").write_text(
             "video_stem,frame_index,timestamp_ms,track_id,bbox_x,bbox_y,bbox_w,bbox_h,score\n"
             "sample,1,1000,11,10,20,40,50,0.95\n"
-            "sample,1,1000,12,80,30,35,45,0.90\n",
+            "sample,1,1000,12,80,30,35,45,0.90\n"
+            "sample,2,1033.333,11,12,22,42,52,0.93\n"
+            "sample,2,1033.333,12,78,28,34,44,0.89\n"
+            "sample,2,1033.333,13,120,40,20,30,0.81\n",
             encoding="utf-8",
         )
         with (self.batch_dir / "manifests" / "annotation_tasks.csv").open(
@@ -235,6 +238,54 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertIn("submitted", result)
         self.assertIn("next_issue", result)
         self.assertEqual(result["next_issue"]["issue"]["issue_id"], "sample_issue_001")
+
+    def test_issue_range_submit_expands_across_issue_frames(self) -> None:
+        state = self._make_state()
+        result = state.submit_issue_range(
+            "annotator_issue_range",
+            "sample_issue_001",
+            {
+                "video_stem": "sample",
+                "frame_index": 1,
+                "timestamp_ms": 1000,
+                "slots": [
+                    {
+                        "slot": "p1",
+                        "bbox_x": 10,
+                        "bbox_y": 20,
+                        "bbox_w": 40,
+                        "bbox_h": 50,
+                        "source": "ai",
+                        "ai_track_id": "11",
+                    },
+                    {
+                        "slot": "p2",
+                        "bbox_x": 0,
+                        "bbox_y": 0,
+                        "bbox_w": 0,
+                        "bbox_h": 0,
+                        "source": "absent",
+                        "ai_track_id": "",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(result["submitted_frame_count"], 2)
+        history = state.list_annotations_for_annotator("annotator_issue_range")
+        self.assertEqual(len(history), 2)
+        details = [
+            state.annotation_detail("annotator_issue_range", item["annotation_id"])
+            for item in history
+        ]
+        by_frame = {item["frame"]["frame_index"]: item for item in details}
+        detail_f1 = by_frame[1]
+        detail_f2 = by_frame[2]
+        self.assertEqual(detail_f1["frame"]["frame_index"], 1)
+        self.assertEqual(detail_f2["frame"]["frame_index"], 2)
+        self.assertEqual(detail_f1["annotation"]["slots"][0]["bbox_x"], 10.0)
+        self.assertEqual(detail_f2["annotation"]["slots"][0]["bbox_x"], 12.0)
+        self.assertEqual(detail_f1["annotation"]["slots"][1]["source"], "absent")
+        self.assertEqual(detail_f2["annotation"]["slots"][1]["source"], "absent")
 
 
 if __name__ == "__main__":

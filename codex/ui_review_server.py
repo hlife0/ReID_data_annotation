@@ -405,6 +405,76 @@ class AnnotationState:
                 "next_issue": next_issue,
             }
 
+    def submit_issue_range(
+        self,
+        annotator_id: str,
+        issue_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        with self._lock:
+            issue = self.issue_lookup.get(issue_id)
+            if issue is None:
+                raise ValueError("issue not found")
+
+            base_record = self._validate_and_build_record(annotator_id, payload)
+            base_slots = json.loads(str(base_record["slots_json"]))
+            if not isinstance(base_slots, list):
+                raise ValueError("invalid slots json")
+
+            frame_records: List[Dict[str, Any]] = []
+            for frame_index in range(issue.start_frame, issue.end_frame + 1):
+                key = (issue.video_stem, frame_index)
+                if key not in self.frame_lookup:
+                    continue
+                rec = self.frame_lookup[key]
+                frame_records.append(
+                    {
+                        "annotation_id": f"ann_{int(time.time() * 1000)}_{uuid.uuid4().hex[:10]}",
+                        "video_stem": issue.video_stem,
+                        "frame_index": frame_index,
+                        "timestamp_ms": _safe_float(rec.timestamp_ms),
+                        "annotator_id": annotator_id,
+                        "submitted_at": _now_iso(),
+                        "slots_json": json.dumps(
+                            self._expand_slots_for_frame(base_slots, issue.video_stem, frame_index),
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                for record in frame_records:
+                    key = (record["video_stem"], int(record["frame_index"]))
+                    self._insert_annotation(conn, record)
+                    self._update_track_person_stats(conn, record)
+                    conn.execute(
+                        """
+                        UPDATE frame_counts
+                        SET annotation_count = annotation_count + 1
+                        WHERE video_stem=? AND frame_index=?
+                        """,
+                        (key[0], key[1]),
+                    )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            for record in frame_records:
+                self._append_jsonl_record(record)
+                self._append_reviewed_csv(record)
+            self._sync_counts_csv_from_db()
+            next_issue = self._issue_payload(self._pick_next_issue_unlocked())
+
+            return {
+                "submitted_frame_count": len(frame_records),
+                "next_issue": next_issue,
+            }
+
     def submit_and_assign_next(
         self,
         annotator_id: str,
@@ -1204,6 +1274,55 @@ class AnnotationState:
         issues.sort(key=lambda item: (-item.priority_score, item.video_stem, item.start_frame, item.issue_id))
         return issues
 
+    def _expand_slots_for_frame(
+        self,
+        base_slots: List[Dict[str, Any]],
+        video_stem: str,
+        frame_index: int,
+    ) -> List[Dict[str, Any]]:
+        key = (video_stem, frame_index)
+        ai_by_track = {
+            str(int(float(box["track_id"]))): box
+            for box in self.ai_boxes.get(key, [])
+        }
+        expanded: List[Dict[str, Any]] = []
+        for item in base_slots:
+            slot = str(item.get("slot", "")).strip().lower()
+            source = str(item.get("source", "")).strip()
+            if source == "absent":
+                expanded.append(empty_slot_record(slot) | {"slot": slot, "source": "absent"})
+                continue
+            if source == "ai":
+                track_id = str(item.get("ai_track_id", "")).strip()
+                box = ai_by_track.get(track_id)
+                if box is None:
+                    expanded.append(empty_slot_record(slot) | {"slot": slot, "source": "absent"})
+                    continue
+                expanded.append(
+                    {
+                        "slot": slot,
+                        "bbox_x": _safe_float(box["bbox_x"]),
+                        "bbox_y": _safe_float(box["bbox_y"]),
+                        "bbox_w": _safe_float(box["bbox_w"]),
+                        "bbox_h": _safe_float(box["bbox_h"]),
+                        "source": "ai",
+                        "ai_track_id": track_id,
+                    }
+                )
+                continue
+            expanded.append(
+                {
+                    "slot": slot,
+                    "bbox_x": _safe_float(item.get("bbox_x", 0.0)),
+                    "bbox_y": _safe_float(item.get("bbox_y", 0.0)),
+                    "bbox_w": _safe_float(item.get("bbox_w", 0.0)),
+                    "bbox_h": _safe_float(item.get("bbox_h", 0.0)),
+                    "source": source,
+                    "ai_track_id": str(item.get("ai_track_id", "")).strip(),
+                }
+            )
+        return expanded
+
     def _pick_next_issue_unlocked(self) -> IssueRecord:
         if not self.issue_pool:
             raise ValueError("issue pool is empty")
@@ -1746,6 +1865,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_submit()
         if path == "/api/submit_issue":
             return self._handle_submit_issue()
+        if path == "/api/submit_issue_range":
+            return self._handle_submit_issue_range()
         if path == "/api/update_annotation":
             return self._handle_update_annotation()
         if path == "/api/export":
@@ -1831,6 +1952,31 @@ class UiHandler(BaseHTTPRequestHandler):
             result = self.state.submit_and_assign_next_issue(annotator_id=annotator_id, payload=payload)
         except Exception as exc:
             self.state.logger.error(f"submit_issue failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit_issue_range(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        issue_id = str(payload.get("issue_id", "")).strip()
+        if not issue_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "issue_id is required"},
+            )
+        try:
+            result = self.state.submit_issue_range(
+                annotator_id=annotator_id,
+                issue_id=issue_id,
+                payload=payload,
+            )
+        except Exception as exc:
+            self.state.logger.error(f"submit_issue_range failed annotator={annotator_id} issue_id={issue_id}: {exc}")
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},

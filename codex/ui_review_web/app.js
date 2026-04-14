@@ -18,6 +18,7 @@ const I18N = {
     manual_draw: "手动画框",
     draw_new_box: "绘制新框",
     mark_absent: "不存在",
+    submit_issue_range: "整段应用",
     src_not_set: "未设置",
     src_ai: "AI",
     src_manual_draw: "手动画框",
@@ -88,6 +89,7 @@ const I18N = {
     manual_draw: "Manual draw",
     draw_new_box: "Draw New Box",
     mark_absent: "Mark Missing",
+    submit_issue_range: "Apply To Issue",
     src_not_set: "not_set",
     src_ai: "ai",
     src_manual_draw: "manual_draw",
@@ -203,6 +205,7 @@ const refs = {
   activeAiButtons: document.getElementById("activeAiButtons"),
   activeDrawBtn: document.getElementById("activeDrawBtn"),
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
+  submitIssueRangeBtn: document.getElementById("submitIssueRangeBtn"),
   activeX: document.getElementById("activeX"),
   activeY: document.getElementById("activeY"),
   activeW: document.getElementById("activeW"),
@@ -356,6 +359,9 @@ function renderCurrentHint() {
 function updateActionLabels() {
   refs.submitBtn.textContent =
     state.dispatchMode === "issue" ? t("submit_next_issue") : t("submit_next");
+  if (refs.submitIssueRangeBtn) {
+    refs.submitIssueRangeBtn.hidden = state.dispatchMode !== "issue";
+  }
 }
 
 function showToast(text, isError = false) {
@@ -1288,6 +1294,41 @@ async function submitAndNext() {
   }
 }
 
+async function submitIssueRange() {
+  if (!state.frame || !state.currentIssue) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  try {
+    validateSubmission();
+  } catch (err) {
+    showToast(err.message, true);
+    return;
+  }
+  if (refs.submitIssueRangeBtn) {
+    refs.submitIssueRangeBtn.disabled = true;
+  }
+  try {
+    const payload = {
+      ...buildSubmitPayload(),
+      issue_id: state.currentIssue.issue_id,
+    };
+    const result = await postJson("/api/submit_issue_range", payload);
+    if (result.next_issue) {
+      applyIssuePayload(result.next_issue, { isAssignment: true });
+      loadIssues({ silent: true });
+    }
+    loadHistory({ silent: true });
+    showToast(`已整段应用 ${result.submitted_frame_count} 帧`);
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.submitIssueRangeBtn) {
+      refs.submitIssueRangeBtn.disabled = false;
+    }
+  }
+}
+
 async function getJson(url) {
   const res = await fetch(url, { cache: "no-store" });
   const payload = await res.json().catch(() => ({}));
@@ -1505,6 +1546,9 @@ function initEvents() {
 
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
+  if (refs.submitIssueRangeBtn) {
+    refs.submitIssueRangeBtn.addEventListener("click", submitIssueRange);
+  }
 
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
   if (refs.refreshIssuesBtn) {
