@@ -1269,6 +1269,9 @@ async function submitAndNext() {
   try {
     const payload = buildSubmitPayload();
     const isIssueMode = state.dispatchMode === "issue" && state.currentIssue;
+    if (isIssueMode && state.currentIssue?.issue_id) {
+      payload.issue_id = state.currentIssue.issue_id;
+    }
     const result = await postJson(isIssueMode ? "/api/submit_issue" : "/api/submit", payload);
     exitEditMode();
     if (isIssueMode && result.next_issue) {

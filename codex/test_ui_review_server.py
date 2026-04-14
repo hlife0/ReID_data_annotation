@@ -207,9 +207,11 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
 
     def test_issue_mode_submit_returns_next_issue_payload(self) -> None:
         state = self._make_state()
+        self.assertEqual(len(state.list_issues(limit=10)), 1)
         result = state.submit_and_assign_next_issue(
             "annotator_issue",
             {
+                "issue_id": "sample_issue_001",
                 "video_stem": "sample",
                 "frame_index": 1,
                 "timestamp_ms": 1000,
@@ -237,7 +239,10 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         )
         self.assertIn("submitted", result)
         self.assertIn("next_issue", result)
-        self.assertEqual(result["next_issue"]["issue"]["issue_id"], "sample_issue_001")
+        self.assertIsNone(result["next_issue"])
+        self.assertEqual(state.list_issues(limit=10), [])
+        detail = state.issue_detail("sample_issue_001")
+        self.assertEqual(detail["issue"]["issue_id"], "sample_issue_001")
 
     def test_issue_range_submit_expands_across_issue_frames(self) -> None:
         state = self._make_state()
@@ -245,6 +250,7 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
             "annotator_issue_range",
             "sample_issue_001",
             {
+                "issue_id": "sample_issue_001",
                 "video_stem": "sample",
                 "frame_index": 1,
                 "timestamp_ms": 1000,
@@ -271,6 +277,8 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
             },
         )
         self.assertEqual(result["submitted_frame_count"], 2)
+        self.assertIsNone(result["next_issue"])
+        self.assertEqual(state.list_issues(limit=10), [])
         history = state.list_annotations_for_annotator("annotator_issue_range")
         self.assertEqual(len(history), 2)
         details = [

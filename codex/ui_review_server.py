@@ -333,9 +333,8 @@ class AnnotationState:
             }
 
     def assign_next_issue(self, annotator_id: str) -> Dict[str, Any]:
-        del annotator_id
         with self._lock:
-            issue = self._pick_next_issue_unlocked()
+            issue = self._pick_next_issue_unlocked(annotator_id=annotator_id)
             return self._issue_payload(issue)
 
     def submit_and_assign_next_issue(
@@ -344,6 +343,11 @@ class AnnotationState:
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         with self._lock:
+            issue_id = str(payload.get("issue_id", "")).strip()
+            if not issue_id:
+                raise ValueError("issue_id is required")
+            if issue_id not in self.issue_lookup:
+                raise ValueError("issue not found")
             annotation_record = self._validate_and_build_record(annotator_id, payload)
             key = (annotation_record["video_stem"], int(annotation_record["frame_index"]))
             if key not in self.frame_lookup:
@@ -376,6 +380,7 @@ class AnnotationState:
                     (key[0], key[1]),
                 )
                 count_after_submit = before + 1
+                self._mark_issue_resolved(conn, issue_id, annotator_id, "issue")
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -386,7 +391,8 @@ class AnnotationState:
             self._append_jsonl_record(annotation_record)
             self._append_reviewed_csv(annotation_record)
             self._sync_counts_csv_from_db()
-            next_issue = self._issue_payload(self._pick_next_issue_unlocked())
+            next_issue_record = self._pick_next_issue_unlocked(annotator_id=annotator_id, allow_none=True)
+            next_issue = self._issue_payload(next_issue_record) if next_issue_record is not None else None
 
             self.logger.info(
                 "submit_issue ok "
@@ -457,6 +463,7 @@ class AnnotationState:
                         """,
                         (key[0], key[1]),
                     )
+                self._mark_issue_resolved(conn, issue.issue_id, annotator_id, "range")
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -468,7 +475,8 @@ class AnnotationState:
                 self._append_jsonl_record(record)
                 self._append_reviewed_csv(record)
             self._sync_counts_csv_from_db()
-            next_issue = self._issue_payload(self._pick_next_issue_unlocked())
+            next_issue_record = self._pick_next_issue_unlocked(annotator_id=annotator_id, allow_none=True)
+            next_issue = self._issue_payload(next_issue_record) if next_issue_record is not None else None
 
             return {
                 "submitted_frame_count": len(frame_records),
@@ -819,7 +827,8 @@ class AnnotationState:
     def list_issues(self, video_stem: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
         normalized_stem = str(video_stem or "").strip()
         max_items = max(1, min(int(limit), 500))
-        issues = self.issue_pool
+        resolved_ids = self._resolved_issue_ids()
+        issues = [issue for issue in self.issue_pool if issue.issue_id not in resolved_ids]
         if normalized_stem:
             issues = [issue for issue in issues if issue.video_stem == normalized_stem]
         return [
@@ -837,6 +846,17 @@ class AnnotationState:
             }
             for issue in issues[:max_items]
         ]
+
+    def _resolved_issue_ids(self, conn: sqlite3.Connection | None = None) -> set[str]:
+        own_conn = conn is None
+        if conn is None:
+            conn = self._connect()
+        try:
+            rows = conn.execute("SELECT issue_id FROM issue_reviews").fetchall()
+            return {str(row["issue_id"]) for row in rows}
+        finally:
+            if own_conn:
+                conn.close()
 
     def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         annotation_id = str(payload.get("annotation_id", "")).strip()
@@ -1001,6 +1021,7 @@ class AnnotationState:
             if self.reset_storage:
                 conn.executescript(
                     """
+                    DROP TABLE IF EXISTS issue_reviews;
                     DROP TABLE IF EXISTS track_person_stats;
                     DROP TABLE IF EXISTS annotations;
                     DROP TABLE IF EXISTS assignments;
@@ -1060,6 +1081,13 @@ class AnnotationState:
                     p2_count INTEGER NOT NULL DEFAULT 0,
                     last_updated_at TEXT NOT NULL,
                     PRIMARY KEY (video_stem, ai_track_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS issue_reviews (
+                    issue_id TEXT PRIMARY KEY,
+                    resolved_at TEXT NOT NULL,
+                    annotator_id TEXT NOT NULL,
+                    resolution_kind TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_annotations_annotator
@@ -1323,12 +1351,45 @@ class AnnotationState:
             )
         return expanded
 
-    def _pick_next_issue_unlocked(self) -> IssueRecord:
+    def _pick_next_issue_unlocked(
+        self,
+        annotator_id: str | None = None,
+        allow_none: bool = False,
+    ) -> IssueRecord | None:
+        del annotator_id
         if not self.issue_pool:
+            if allow_none:
+                return None
             raise ValueError("issue pool is empty")
-        issue = self.issue_pool[self._issue_dispatch_index % len(self.issue_pool)]
+        resolved_ids = self._resolved_issue_ids()
+        unresolved = [issue for issue in self.issue_pool if issue.issue_id not in resolved_ids]
+        if not unresolved:
+            if allow_none:
+                return None
+            raise ValueError("no unresolved issues left")
+        issue = unresolved[self._issue_dispatch_index % len(unresolved)]
         self._issue_dispatch_index += 1
         return issue
+
+    def _mark_issue_resolved(
+        self,
+        conn: sqlite3.Connection,
+        issue_id: str,
+        annotator_id: str,
+        resolution_kind: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO issue_reviews (
+                issue_id,
+                resolved_at,
+                annotator_id,
+                resolution_kind
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (issue_id, _now_iso(), annotator_id, resolution_kind),
+        )
 
     def _annotation_count_for_frame(self, video_stem: str, frame_index: int) -> int:
         conn = self._connect()
