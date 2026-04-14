@@ -42,6 +42,7 @@ const I18N = {
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
     toast_recommend_applied: "已应用历史推荐",
     issue_none: "当前未加载问题点",
+    issue_list_title: "问题列表",
     issue_range: "范围 #{start} - #{end}",
     issue_tracks: "轨迹 {tracks}",
     err_bbox_missing: "{slot} 框未设置",
@@ -111,6 +112,7 @@ const I18N = {
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
     toast_recommend_applied: "Applied historical recommendations",
     issue_none: "No issue loaded",
+    issue_list_title: "Issue List",
     issue_range: "Range #{start} - #{end}",
     issue_tracks: "Tracks {tracks}",
     err_bbox_missing: "{slot} bbox is missing",
@@ -176,6 +178,7 @@ const state = {
   lastAssignmentFrame: null,
   lastAssignmentIssue: null,
   currentIssue: null,
+  issues: [],
   dispatchMode: "frame",
   progressTarget: 4000,
 };
@@ -222,6 +225,8 @@ const refs = {
   issueRangeText: document.getElementById("issueRangeText"),
   issueTrackText: document.getElementById("issueTrackText"),
   issueReasonList: document.getElementById("issueReasonList"),
+  issueListBody: document.getElementById("issueListBody"),
+  refreshIssuesBtn: document.getElementById("refreshIssuesBtn"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -609,6 +614,39 @@ function renderIssueSummary() {
   updateActionLabels();
 }
 
+function renderIssueList() {
+  if (!refs.issueListBody) return;
+  refs.issueListBody.innerHTML = "";
+  const issues = Array.isArray(state.issues) ? state.issues : [];
+  if (issues.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "issue-list-item";
+    empty.textContent = t("issue_none");
+    refs.issueListBody.appendChild(empty);
+    return;
+  }
+
+  for (const issue of issues) {
+    const row = document.createElement("div");
+    row.className = `issue-list-item ${String(issue.severity || "").toLowerCase()}`;
+    if (state.currentIssue && issue.issue_id === state.currentIssue.issue_id) {
+      row.classList.add("active");
+    }
+    const tracks = Array.isArray(issue.primary_track_ids) && issue.primary_track_ids.length
+      ? issue.primary_track_ids.join(", ")
+      : "-";
+    row.innerHTML = `
+      <div class="issue-list-item-top">
+        <span>${issue.issue_id}</span>
+        <span>${String(issue.severity || "").toUpperCase()}</span>
+      </div>
+      <div class="issue-list-item-meta">#${issue.start_frame} - #${issue.end_frame} | tracks ${tracks}</div>
+    `;
+    row.addEventListener("click", () => loadIssueDetail(issue.issue_id));
+    refs.issueListBody.appendChild(row);
+  }
+}
+
 function resetSlots() {
   state.slots = {};
   const names = Array.isArray(state.frame?.slot_names) && state.frame.slot_names.length
@@ -648,6 +686,7 @@ function applyFrame(frame, options = {}) {
   }
   syncHeader();
   renderIssueSummary();
+  renderIssueList();
   updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
@@ -1128,6 +1167,7 @@ async function requestNextIssue() {
     const payload = await postJson("/api/next_issue", { annotator_id: annotatorId() });
     exitEditMode();
     applyIssuePayload(payload, { isAssignment: true });
+    loadIssues({ silent: true });
     showToastKey("toast_loaded_issue");
   } catch (err) {
     showToast(err.message, true);
@@ -1135,6 +1175,30 @@ async function requestNextIssue() {
     if (refs.nextIssueBtn) {
       refs.nextIssueBtn.disabled = false;
     }
+  }
+}
+
+async function loadIssues(options = {}) {
+  const { silent = false } = options;
+  try {
+    const payload = await getJson("/api/issues?limit=40");
+    state.issues = payload.issues || [];
+    renderIssueList();
+    if (!silent) {
+      showToastKey("toast_loaded_issue");
+    }
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function loadIssueDetail(issueId) {
+  try {
+    const payload = await getJson(`/api/issue_detail?issue_id=${encodeURIComponent(issueId)}`);
+    exitEditMode();
+    applyIssuePayload(payload, { isAssignment: true });
+  } catch (err) {
+    showToast(err.message, true);
   }
 }
 
@@ -1158,6 +1222,7 @@ async function submitAndNext() {
     exitEditMode();
     if (isIssueMode && result.next_issue) {
       applyIssuePayload(result.next_issue, { isAssignment: true });
+      loadIssues({ silent: true });
     } else {
       state.dispatchMode = "frame";
       state.currentIssue = null;
@@ -1397,6 +1462,9 @@ function initEvents() {
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
 
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
+  if (refs.refreshIssuesBtn) {
+    refs.refreshIssuesBtn.addEventListener("click", () => loadIssues());
+  }
   refs.saveEditBtn.addEventListener("click", saveEdit);
   refs.exitEditBtn.addEventListener("click", exitEditMode);
   if (refs.historyToggleBtn && refs.historyDock) {
@@ -1442,6 +1510,7 @@ function init() {
   refs.exitEditBtn.hidden = true;
   initHistoryDock();
   loadHistory({ silent: true });
+  loadIssues({ silent: true });
 }
 
 window.addEventListener("DOMContentLoaded", init);

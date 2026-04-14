@@ -460,6 +460,69 @@ select {
   align-content: start;
 }
 
+.issue-list-panel {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.issue-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.issue-list-body {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.issue-list-item {
+  border: 1px solid rgba(30, 50, 70, 0.14);
+  border-left: 4px solid #9b7a1d;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 6px 7px;
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.issue-list-item.red {
+  border-left-color: #aa3c2a;
+}
+
+.issue-list-item.yellow {
+  border-left-color: #9b7a1d;
+}
+
+.issue-list-item.active {
+  box-shadow: 0 0 0 2px rgba(23, 114, 199, 0.14);
+}
+
+.issue-list-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.issue-list-item-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .slot-stack {
   display: grid;
   gap: 8px;

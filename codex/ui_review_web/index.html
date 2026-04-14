@@ -87,6 +87,14 @@
         </section>
 
         <section class="control-panel">
+          <div id="issueList" class="issue-list-panel">
+            <div class="issue-list-head">
+              <span data-i18n="issue_list_title">问题列表</span>
+              <button id="refreshIssuesBtn" class="btn subtle" data-i18n="history_refresh">刷新</button>
+            </div>
+            <div id="issueListBody" class="issue-list-body"></div>
+          </div>
+
           <div class="slot-stack">
             <div class="slot-stack-head">
               <span id="slotStackTitle" class="label" data-i18n="slots_title">标注槽位</span>

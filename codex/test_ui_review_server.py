@@ -189,6 +189,10 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         state = self._make_state()
 
         self.assertEqual(len(state.issue_pool), 1)
+        listed = state.list_issues(limit=10)
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0]["issue_id"], "sample_issue_001")
+        self.assertEqual(state.list_issues(video_stem="sample", limit=10)[0]["video_stem"], "sample")
         issue_payload = state.assign_next_issue("annotator_issue")
         self.assertEqual(issue_payload["issue"]["issue_id"], "sample_issue_001")
         self.assertEqual(issue_payload["issue"]["video_stem"], "sample")

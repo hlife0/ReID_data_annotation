@@ -746,6 +746,28 @@ class AnnotationState:
             raise ValueError("issue not found")
         return self._issue_payload(issue)
 
+    def list_issues(self, video_stem: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
+        normalized_stem = str(video_stem or "").strip()
+        max_items = max(1, min(int(limit), 500))
+        issues = self.issue_pool
+        if normalized_stem:
+            issues = [issue for issue in issues if issue.video_stem == normalized_stem]
+        return [
+            {
+                "issue_id": issue.issue_id,
+                "video_stem": issue.video_stem,
+                "severity": issue.severity,
+                "priority_score": issue.priority_score,
+                "start_frame": issue.start_frame,
+                "end_frame": issue.end_frame,
+                "frame_count": issue.frame_count,
+                "primary_track_ids": issue.primary_track_ids,
+                "reason_codes": issue.reason_codes,
+                "imu_count": issue.imu_count,
+            }
+            for issue in issues[:max_items]
+        ]
+
     def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         annotation_id = str(payload.get("annotation_id", "")).strip()
         if not annotation_id:
@@ -1699,6 +1721,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_my_annotations(parsed.query)
         if path == "/api/annotation_detail":
             return self._handle_annotation_detail(parsed.query)
+        if path == "/api/issues":
+            return self._handle_issue_list(parsed.query)
         if path == "/api/issue_detail":
             return self._handle_issue_detail(parsed.query)
         if path == "/api/frame_image":
@@ -1931,6 +1955,21 @@ class UiHandler(BaseHTTPRequestHandler):
                 {"ok": False, "error": str(exc)},
             )
         self._send_json(HTTPStatus.OK, {"ok": True, **data})
+
+    def _handle_issue_list(self, query: str) -> None:
+        q = parse_qs(query)
+        video_stem = str(q.get("video_stem", [""])[0]).strip() or None
+        limit_raw = str(q.get("limit", ["50"])[0]).strip() or "50"
+        try:
+            limit = int(limit_raw)
+            issues = self.state.list_issues(video_stem=video_stem, limit=limit)
+        except Exception as exc:
+            self.state.logger.error(f"issue_list failed video_stem={video_stem} limit={limit_raw}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, "issues": issues})
 
     def _send_json(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
