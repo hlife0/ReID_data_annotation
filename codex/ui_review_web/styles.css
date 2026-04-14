@@ -163,6 +163,71 @@ select {
   font-weight: 600;
 }
 
+.issue-summary {
+  margin-top: 10px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1px solid rgba(179, 113, 27, 0.24);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.issue-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: #9b7a1d;
+}
+
+.issue-badge.red {
+  background: #aa3c2a;
+}
+
+.issue-badge.yellow {
+  background: #9b7a1d;
+}
+
+.issue-id-text {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.issue-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.issue-reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.issue-reason-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(30, 50, 70, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  padding: 3px 8px;
+  font-size: 0.74rem;
+}
+
 .status-strip .label {
   font-size: 0.82rem;
   color: var(--muted);

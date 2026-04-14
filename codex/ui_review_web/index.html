@@ -46,6 +46,7 @@
             </div>
             <div id="progressText" class="progress-text">0/4000</div>
           </div>
+          <button id="nextIssueBtn" class="btn subtle" data-i18n="next_issue">下一问题点</button>
           <button id="nextFrameBtn" class="btn subtle" data-i18n="skip_frame">跳过当前帧</button>
           <button id="submitBtn" class="btn" data-i18n="submit_next">提交并下一帧</button>
           <button id="langToggleBtn" class="btn subtle">EN</button>
@@ -57,6 +58,18 @@
         <div><span id="labelFrame" class="label" data-i18n="frame">帧号</span> <span id="frameIndex">-</span></div>
         <div><span id="labelTs" class="label" data-i18n="timestamp_ms">时间戳(ms)</span> <span id="timestampMs">-</span></div>
         <div><span id="labelCount" class="label" data-i18n="annotation_count">标注次数</span> <span id="annoCount">-</span></div>
+      </section>
+
+      <section id="issueSummary" class="issue-summary" hidden>
+        <div class="issue-summary-head">
+          <span id="issueBadge" class="issue-badge">ISSUE</span>
+          <span id="issueIdText" class="issue-id-text">-</span>
+        </div>
+        <div class="issue-summary-meta">
+          <span id="issueRangeText">-</span>
+          <span id="issueTrackText">-</span>
+        </div>
+        <div id="issueReasonList" class="issue-reason-list"></div>
       </section>
 
       <main class="main-grid">

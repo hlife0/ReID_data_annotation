@@ -198,6 +198,40 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertEqual(detail["issue"]["issue_id"], "sample_issue_001")
         self.assertEqual(detail["frame"]["frame_index"], 1)
 
+    def test_issue_mode_submit_returns_next_issue_payload(self) -> None:
+        state = self._make_state()
+        result = state.submit_and_assign_next_issue(
+            "annotator_issue",
+            {
+                "video_stem": "sample",
+                "frame_index": 1,
+                "timestamp_ms": 1000,
+                "slots": [
+                    {
+                        "slot": "p1",
+                        "bbox_x": 10,
+                        "bbox_y": 20,
+                        "bbox_w": 40,
+                        "bbox_h": 50,
+                        "source": "ai",
+                        "ai_track_id": "11",
+                    },
+                    {
+                        "slot": "p2",
+                        "bbox_x": 0,
+                        "bbox_y": 0,
+                        "bbox_w": 0,
+                        "bbox_h": 0,
+                        "source": "absent",
+                        "ai_track_id": "",
+                    },
+                ],
+            },
+        )
+        self.assertIn("submitted", result)
+        self.assertIn("next_issue", result)
+        self.assertEqual(result["next_issue"]["issue"]["issue_id"], "sample_issue_001")
+
 
 if __name__ == "__main__":
     unittest.main()

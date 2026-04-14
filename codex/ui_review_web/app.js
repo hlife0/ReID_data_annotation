@@ -3,8 +3,10 @@ const I18N = {
     page_title: "多人框标注复核",
     page_subtitle: "P1-P7 多人标注流程。",
     annotator_id: "标注员ID",
+    next_issue: "下一问题点",
     skip_frame: "跳过当前帧",
     submit_next: "提交并下一帧",
+    submit_next_issue: "提交并下一问题点",
     video: "视频",
     frame: "帧号",
     timestamp_ms: "时间戳(ms)",
@@ -33,11 +35,15 @@ const I18N = {
     hint_click_drag_draw: "请在画布上按住拖拽绘制 {slot}",
     hint_marked_absent: "{slot} 已标记为不存在",
     toast_frame_load_failed: "帧图加载失败",
+    toast_loaded_issue: "已加载下一问题点",
     toast_loaded_next: "已加载下一帧",
     toast_no_frame: "当前没有可操作帧",
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
     toast_recommend_applied: "已应用历史推荐",
+    issue_none: "当前未加载问题点",
+    issue_range: "范围 #{start} - #{end}",
+    issue_tracks: "轨迹 {tracks}",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -66,8 +72,10 @@ const I18N = {
     page_title: "Multi-Person UI Review",
     page_subtitle: "Multi-person review workflow for P1-P7.",
     annotator_id: "Annotator ID",
+    next_issue: "Next Issue",
     skip_frame: "Skip This Frame",
     submit_next: "Submit & Next Frame",
+    submit_next_issue: "Submit & Next Issue",
     video: "Video",
     frame: "Frame",
     timestamp_ms: "Timestamp (ms)",
@@ -96,11 +104,15 @@ const I18N = {
     hint_click_drag_draw: "Click and drag on canvas to draw {slot}",
     hint_marked_absent: "{slot} marked as missing",
     toast_frame_load_failed: "Failed to load frame image",
+    toast_loaded_issue: "Loaded next issue",
     toast_loaded_next: "Loaded next frame",
     toast_no_frame: "No frame loaded",
     toast_ai_not_found: "AI track not found",
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
     toast_recommend_applied: "Applied historical recommendations",
+    issue_none: "No issue loaded",
+    issue_range: "Range #{start} - #{end}",
+    issue_tracks: "Tracks {tracks}",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -162,12 +174,16 @@ const state = {
   editing: false,
   editingAnnotationId: "",
   lastAssignmentFrame: null,
+  lastAssignmentIssue: null,
+  currentIssue: null,
+  dispatchMode: "frame",
   progressTarget: 4000,
 };
 
 const refs = {
   langToggleBtn: document.getElementById("langToggleBtn"),
   annotatorId: document.getElementById("annotatorId"),
+  nextIssueBtn: document.getElementById("nextIssueBtn"),
   nextFrameBtn: document.getElementById("nextFrameBtn"),
   submitBtn: document.getElementById("submitBtn"),
   videoStem: document.getElementById("videoStem"),
@@ -200,6 +216,12 @@ const refs = {
   historyToggleBtn: document.getElementById("historyToggleBtn"),
   progressFill: document.getElementById("progressFill"),
   progressText: document.getElementById("progressText"),
+  issueSummary: document.getElementById("issueSummary"),
+  issueBadge: document.getElementById("issueBadge"),
+  issueIdText: document.getElementById("issueIdText"),
+  issueRangeText: document.getElementById("issueRangeText"),
+  issueTrackText: document.getElementById("issueTrackText"),
+  issueReasonList: document.getElementById("issueReasonList"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -239,6 +261,8 @@ function applyLanguage() {
   renderSlotTabs();
   renderAiButtons();
   renderCurrentHint();
+  renderIssueSummary();
+  updateActionLabels();
   updateProgress();
 }
 
@@ -320,6 +344,11 @@ function setHintByKey(key, vars = {}) {
 
 function renderCurrentHint() {
   refs.canvasHint.textContent = t(state.hintKey, state.hintVars);
+}
+
+function updateActionLabels() {
+  refs.submitBtn.textContent =
+    state.dispatchMode === "issue" ? t("submit_next_issue") : t("submit_next");
 }
 
 function showToast(text, isError = false) {
@@ -549,6 +578,37 @@ function syncHeader() {
   refs.annoCount.textContent = state.frame.annotation_count;
 }
 
+function renderIssueSummary() {
+  if (!refs.issueSummary) return;
+  const issue = state.currentIssue;
+  if (!issue) {
+    refs.issueSummary.hidden = true;
+    updateActionLabels();
+    return;
+  }
+  refs.issueSummary.hidden = false;
+  refs.issueBadge.textContent = String(issue.severity || "issue").toUpperCase();
+  refs.issueBadge.className = `issue-badge ${String(issue.severity || "").toLowerCase()}`;
+  refs.issueIdText.textContent = issue.issue_id || t("issue_none");
+  refs.issueRangeText.textContent = t("issue_range", {
+    start: issue.start_frame,
+    end: issue.end_frame,
+  });
+  const tracks = Array.isArray(issue.primary_track_ids) && issue.primary_track_ids.length
+    ? issue.primary_track_ids.join(", ")
+    : "-";
+  refs.issueTrackText.textContent = t("issue_tracks", { tracks });
+  refs.issueReasonList.innerHTML = "";
+  const reasons = Array.isArray(issue.reason_codes) ? issue.reason_codes : [];
+  for (const reason of reasons) {
+    const pill = document.createElement("span");
+    pill.className = "issue-reason-pill";
+    pill.textContent = reason;
+    refs.issueReasonList.appendChild(pill);
+  }
+  updateActionLabels();
+}
+
 function resetSlots() {
   state.slots = {};
   const names = Array.isArray(state.frame?.slot_names) && state.frame.slot_names.length
@@ -587,11 +647,21 @@ function applyFrame(frame, options = {}) {
     applyRecommendations(frame.recommendations);
   }
   syncHeader();
+  renderIssueSummary();
   updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
     state.lastAssignmentFrame = frame;
   }
+}
+
+function applyIssuePayload(payload, options = {}) {
+  state.dispatchMode = "issue";
+  state.currentIssue = payload.issue || null;
+  if (options.isAssignment) {
+    state.lastAssignmentIssue = state.currentIssue;
+  }
+  applyFrame(payload.frame, options);
 }
 
 function renderAiButtons() {
@@ -1036,6 +1106,9 @@ async function requestNextFrame() {
   refs.nextFrameBtn.disabled = true;
   try {
     const payload = await postJson("/api/next_frame", { annotator_id: annotatorId() });
+    state.dispatchMode = "frame";
+    state.currentIssue = null;
+    state.lastAssignmentIssue = null;
     exitEditMode();
     applyFrame(payload.frame, { isAssignment: true });
     schedulePrefetch(payload.prefetch_frames);
@@ -1044,6 +1117,24 @@ async function requestNextFrame() {
     showToast(err.message, true);
   } finally {
     refs.nextFrameBtn.disabled = false;
+  }
+}
+
+async function requestNextIssue() {
+  if (refs.nextIssueBtn) {
+    refs.nextIssueBtn.disabled = true;
+  }
+  try {
+    const payload = await postJson("/api/next_issue", { annotator_id: annotatorId() });
+    exitEditMode();
+    applyIssuePayload(payload, { isAssignment: true });
+    showToastKey("toast_loaded_issue");
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.nextIssueBtn) {
+      refs.nextIssueBtn.disabled = false;
+    }
   }
 }
 
@@ -1062,10 +1153,18 @@ async function submitAndNext() {
   refs.submitBtn.disabled = true;
   try {
     const payload = buildSubmitPayload();
-    const result = await postJson("/api/submit", payload);
+    const isIssueMode = state.dispatchMode === "issue" && state.currentIssue;
+    const result = await postJson(isIssueMode ? "/api/submit_issue" : "/api/submit", payload);
     exitEditMode();
-    applyFrame(result.next_frame, { isAssignment: true });
-    schedulePrefetch(result.prefetch_frames);
+    if (isIssueMode && result.next_issue) {
+      applyIssuePayload(result.next_issue, { isAssignment: true });
+    } else {
+      state.dispatchMode = "frame";
+      state.currentIssue = null;
+      state.lastAssignmentIssue = null;
+      applyFrame(result.next_frame, { isAssignment: true });
+      schedulePrefetch(result.prefetch_frames);
+    }
     loadHistory();
     showToastKey("toast_submitted", {
       video: result.submitted.video_stem,
@@ -1197,6 +1296,9 @@ function enterEditMode(annotationId) {
   refs.exitEditBtn.hidden = false;
   refs.submitBtn.disabled = true;
   refs.nextFrameBtn.disabled = true;
+  if (refs.nextIssueBtn) {
+    refs.nextIssueBtn.disabled = true;
+  }
 }
 
 function exitEditMode() {
@@ -1209,7 +1311,15 @@ function exitEditMode() {
   refs.exitEditBtn.hidden = true;
   refs.submitBtn.disabled = false;
   refs.nextFrameBtn.disabled = false;
-  if (state.lastAssignmentFrame) {
+  if (refs.nextIssueBtn) {
+    refs.nextIssueBtn.disabled = false;
+  }
+  if (state.dispatchMode === "issue" && state.lastAssignmentFrame && state.lastAssignmentIssue) {
+    applyIssuePayload(
+      { issue: state.lastAssignmentIssue, frame: state.lastAssignmentFrame },
+      { isAssignment: true }
+    );
+  } else if (state.lastAssignmentFrame) {
     applyFrame(state.lastAssignmentFrame, { skipRecommendations: false, isAssignment: true });
   }
 }
@@ -1277,6 +1387,9 @@ function initEvents() {
   });
 
   refs.langToggleBtn.addEventListener("click", toggleLanguage);
+  if (refs.nextIssueBtn) {
+    refs.nextIssueBtn.addEventListener("click", requestNextIssue);
+  }
   refs.nextFrameBtn.addEventListener("click", requestNextFrame);
   refs.submitBtn.addEventListener("click", submitAndNext);
 

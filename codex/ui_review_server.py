@@ -335,11 +335,75 @@ class AnnotationState:
     def assign_next_issue(self, annotator_id: str) -> Dict[str, Any]:
         del annotator_id
         with self._lock:
-            if not self.issue_pool:
-                raise ValueError("issue pool is empty")
-            issue = self.issue_pool[self._issue_dispatch_index % len(self.issue_pool)]
-            self._issue_dispatch_index += 1
+            issue = self._pick_next_issue_unlocked()
             return self._issue_payload(issue)
+
+    def submit_and_assign_next_issue(
+        self,
+        annotator_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        with self._lock:
+            annotation_record = self._validate_and_build_record(annotator_id, payload)
+            key = (annotation_record["video_stem"], int(annotation_record["frame_index"]))
+            if key not in self.frame_lookup:
+                raise ValueError("frame does not exist in frame pool, cannot submit annotation")
+
+            count_after_submit = 0
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    """
+                    SELECT annotation_count
+                    FROM frame_counts
+                    WHERE video_stem=? AND frame_index=?
+                    """,
+                    (key[0], key[1]),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("frame does not exist in database")
+                before = int(row["annotation_count"])
+
+                self._insert_annotation(conn, annotation_record)
+                self._update_track_person_stats(conn, annotation_record)
+                conn.execute(
+                    """
+                    UPDATE frame_counts
+                    SET annotation_count = annotation_count + 1
+                    WHERE video_stem=? AND frame_index=?
+                    """,
+                    (key[0], key[1]),
+                )
+                count_after_submit = before + 1
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            self._append_jsonl_record(annotation_record)
+            self._append_reviewed_csv(annotation_record)
+            self._sync_counts_csv_from_db()
+            next_issue = self._issue_payload(self._pick_next_issue_unlocked())
+
+            self.logger.info(
+                "submit_issue ok "
+                f"annotation_id={annotation_record['annotation_id']} "
+                f"video_stem={annotation_record['video_stem']} "
+                f"frame_index={annotation_record['frame_index']} "
+                f"count_after={count_after_submit}"
+            )
+            return {
+                "submitted": {
+                    "annotation_id": annotation_record["annotation_id"],
+                    "video_stem": annotation_record["video_stem"],
+                    "frame_index": annotation_record["frame_index"],
+                    "count_after_submit": count_after_submit,
+                },
+                "next_issue": next_issue,
+            }
 
     def submit_and_assign_next(
         self,
@@ -1118,6 +1182,13 @@ class AnnotationState:
         issues.sort(key=lambda item: (-item.priority_score, item.video_stem, item.start_frame, item.issue_id))
         return issues
 
+    def _pick_next_issue_unlocked(self) -> IssueRecord:
+        if not self.issue_pool:
+            raise ValueError("issue pool is empty")
+        issue = self.issue_pool[self._issue_dispatch_index % len(self.issue_pool)]
+        self._issue_dispatch_index += 1
+        return issue
+
     def _annotation_count_for_frame(self, video_stem: str, frame_index: int) -> int:
         conn = self._connect()
         try:
@@ -1649,6 +1720,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_next_issue()
         if path == "/api/submit":
             return self._handle_submit()
+        if path == "/api/submit_issue":
+            return self._handle_submit_issue()
         if path == "/api/update_annotation":
             return self._handle_update_annotation()
         if path == "/api/export":
@@ -1719,6 +1792,21 @@ class UiHandler(BaseHTTPRequestHandler):
             result = self.state.submit_and_assign_next(annotator_id=annotator_id, payload=payload)
         except Exception as exc:
             self.state.logger.error(f"submit failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit_issue(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.submit_and_assign_next_issue(annotator_id=annotator_id, payload=payload)
+        except Exception as exc:
+            self.state.logger.error(f"submit_issue failed annotator={annotator_id}: {exc}")
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},
