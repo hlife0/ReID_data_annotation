@@ -417,6 +417,22 @@ class AnnotationState:
         issue_id: str,
         payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        return self.submit_issue_partial_range(
+            annotator_id=annotator_id,
+            issue_id=issue_id,
+            start_frame=None,
+            end_frame=None,
+            payload=payload,
+        )
+
+    def submit_issue_partial_range(
+        self,
+        annotator_id: str,
+        issue_id: str,
+        start_frame: int | None,
+        end_frame: int | None,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
         with self._lock:
             issue = self.issue_lookup.get(issue_id)
             if issue is None:
@@ -427,8 +443,13 @@ class AnnotationState:
             if not isinstance(base_slots, list):
                 raise ValueError("invalid slots json")
 
+            start = issue.start_frame if start_frame is None else max(issue.start_frame, int(start_frame))
+            end = issue.end_frame if end_frame is None else min(issue.end_frame, int(end_frame))
+            if end < start:
+                raise ValueError("invalid issue frame range")
+
             frame_records: List[Dict[str, Any]] = []
-            for frame_index in range(issue.start_frame, issue.end_frame + 1):
+            for frame_index in range(start, end + 1):
                 key = (issue.video_stem, frame_index)
                 if key not in self.frame_lookup:
                     continue
@@ -463,7 +484,8 @@ class AnnotationState:
                         """,
                         (key[0], key[1]),
                     )
-                self._mark_issue_resolved(conn, issue.issue_id, annotator_id, "range")
+                if start == issue.start_frame and end == issue.end_frame:
+                    self._mark_issue_resolved(conn, issue.issue_id, annotator_id, "range")
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -1937,6 +1959,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_submit_issue()
         if path == "/api/submit_issue_range":
             return self._handle_submit_issue_range()
+        if path == "/api/submit_issue_partial_range":
+            return self._handle_submit_issue_partial_range()
         if path == "/api/update_annotation":
             return self._handle_update_annotation()
         if path == "/api/export":
@@ -2047,6 +2071,37 @@ class UiHandler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             self.state.logger.error(f"submit_issue_range failed annotator={annotator_id} issue_id={issue_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit_issue_partial_range(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        issue_id = str(payload.get("issue_id", "")).strip()
+        if not issue_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "issue_id is required"},
+            )
+        start_frame = payload.get("start_frame")
+        end_frame = payload.get("end_frame")
+        try:
+            result = self.state.submit_issue_partial_range(
+                annotator_id=annotator_id,
+                issue_id=issue_id,
+                start_frame=None if start_frame is None else int(start_frame),
+                end_frame=None if end_frame is None else int(end_frame),
+                payload=payload,
+            )
+        except Exception as exc:
+            self.state.logger.error(
+                f"submit_issue_partial_range failed annotator={annotator_id} issue_id={issue_id}: {exc}"
+            )
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},

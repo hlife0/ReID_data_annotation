@@ -18,6 +18,8 @@ const I18N = {
     manual_draw: "手动画框",
     draw_new_box: "绘制新框",
     mark_absent: "不存在",
+    submit_issue_backward: "从当前帧向前应用",
+    submit_issue_forward: "从当前帧向后应用",
     submit_issue_range: "整段应用",
     src_not_set: "未设置",
     src_ai: "AI",
@@ -89,6 +91,8 @@ const I18N = {
     manual_draw: "Manual draw",
     draw_new_box: "Draw New Box",
     mark_absent: "Mark Missing",
+    submit_issue_backward: "Apply Backward",
+    submit_issue_forward: "Apply Forward",
     submit_issue_range: "Apply To Issue",
     src_not_set: "not_set",
     src_ai: "ai",
@@ -205,6 +209,8 @@ const refs = {
   activeAiButtons: document.getElementById("activeAiButtons"),
   activeDrawBtn: document.getElementById("activeDrawBtn"),
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
+  submitIssueBackwardBtn: document.getElementById("submitIssueBackwardBtn"),
+  submitIssueForwardBtn: document.getElementById("submitIssueForwardBtn"),
   submitIssueRangeBtn: document.getElementById("submitIssueRangeBtn"),
   activeX: document.getElementById("activeX"),
   activeY: document.getElementById("activeY"),
@@ -363,6 +369,12 @@ function updateActionLabels() {
     state.dispatchMode === "issue" ? t("submit_next_issue") : t("submit_next");
   if (refs.submitIssueRangeBtn) {
     refs.submitIssueRangeBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.submitIssueForwardBtn) {
+    refs.submitIssueForwardBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.submitIssueBackwardBtn) {
+    refs.submitIssueBackwardBtn.hidden = state.dispatchMode !== "issue";
   }
 }
 
@@ -1359,6 +1371,84 @@ async function submitIssueRange() {
   }
 }
 
+async function submitIssueForwardRange() {
+  if (!state.frame || !state.currentIssue) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  try {
+    validateSubmission();
+  } catch (err) {
+    showToast(err.message, true);
+    return;
+  }
+  if (refs.submitIssueForwardBtn) {
+    refs.submitIssueForwardBtn.disabled = true;
+  }
+  try {
+    const payload = {
+      ...buildSubmitPayload(),
+      issue_id: state.currentIssue.issue_id,
+      start_frame: state.frame.frame_index,
+      end_frame: state.currentIssue.end_frame,
+    };
+    const result = await postJson("/api/submit_issue_partial_range", payload);
+    if (result.next_issue) {
+      applyIssuePayload(result.next_issue, { isAssignment: true });
+      loadIssues({ silent: true });
+    } else {
+      loadIssues({ silent: true });
+    }
+    loadHistory({ silent: true });
+    showToast(`已向后应用 ${result.submitted_frame_count} 帧`);
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.submitIssueForwardBtn) {
+      refs.submitIssueForwardBtn.disabled = false;
+    }
+  }
+}
+
+async function submitIssueBackwardRange() {
+  if (!state.frame || !state.currentIssue) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  try {
+    validateSubmission();
+  } catch (err) {
+    showToast(err.message, true);
+    return;
+  }
+  if (refs.submitIssueBackwardBtn) {
+    refs.submitIssueBackwardBtn.disabled = true;
+  }
+  try {
+    const payload = {
+      ...buildSubmitPayload(),
+      issue_id: state.currentIssue.issue_id,
+      start_frame: state.currentIssue.start_frame,
+      end_frame: state.frame.frame_index,
+    };
+    const result = await postJson("/api/submit_issue_partial_range", payload);
+    if (result.next_issue) {
+      applyIssuePayload(result.next_issue, { isAssignment: true });
+      loadIssues({ silent: true });
+    } else {
+      loadIssues({ silent: true });
+    }
+    loadHistory({ silent: true });
+    showToast(`已向前应用 ${result.submitted_frame_count} 帧`);
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.submitIssueBackwardBtn) {
+      refs.submitIssueBackwardBtn.disabled = false;
+    }
+  }
+}
+
 async function getJson(url) {
   const res = await fetch(url, { cache: "no-store" });
   const payload = await res.json().catch(() => ({}));
@@ -1576,6 +1666,14 @@ function initEvents() {
 
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
+  if (refs.submitIssueBackwardBtn) {
+    refs.submitIssueBackwardBtn.textContent = t("submit_issue_backward");
+    refs.submitIssueBackwardBtn.addEventListener("click", submitIssueBackwardRange);
+  }
+  if (refs.submitIssueForwardBtn) {
+    refs.submitIssueForwardBtn.textContent = t("submit_issue_forward");
+    refs.submitIssueForwardBtn.addEventListener("click", submitIssueForwardRange);
+  }
   if (refs.submitIssueRangeBtn) {
     refs.submitIssueRangeBtn.addEventListener("click", submitIssueRange);
   }

@@ -298,6 +298,86 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertEqual(detail_f1["annotation"]["slots"][1]["source"], "absent")
         self.assertEqual(detail_f2["annotation"]["slots"][1]["source"], "absent")
 
+    def test_issue_partial_range_submit_only_writes_subrange(self) -> None:
+        state = self._make_state()
+        result = state.submit_issue_partial_range(
+            "annotator_issue_partial",
+            "sample_issue_001",
+            2,
+            2,
+            {
+                "issue_id": "sample_issue_001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "timestamp_ms": 1033.333,
+                "slots": [
+                    {
+                        "slot": "p1",
+                        "bbox_x": 12,
+                        "bbox_y": 22,
+                        "bbox_w": 42,
+                        "bbox_h": 52,
+                        "source": "ai",
+                        "ai_track_id": "11",
+                    },
+                    {
+                        "slot": "p2",
+                        "bbox_x": 0,
+                        "bbox_y": 0,
+                        "bbox_w": 0,
+                        "bbox_h": 0,
+                        "source": "absent",
+                        "ai_track_id": "",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(result["submitted_frame_count"], 1)
+        history = state.list_annotations_for_annotator("annotator_issue_partial")
+        self.assertEqual(len(history), 1)
+        detail = state.annotation_detail("annotator_issue_partial", history[0]["annotation_id"])
+        self.assertEqual(detail["frame"]["frame_index"], 2)
+
+    def test_issue_partial_range_submit_can_write_prefix_subrange(self) -> None:
+        state = self._make_state()
+        result = state.submit_issue_partial_range(
+            "annotator_issue_partial_prefix",
+            "sample_issue_001",
+            1,
+            1,
+            {
+                "issue_id": "sample_issue_001",
+                "video_stem": "sample",
+                "frame_index": 1,
+                "timestamp_ms": 1000,
+                "slots": [
+                    {
+                        "slot": "p1",
+                        "bbox_x": 10,
+                        "bbox_y": 20,
+                        "bbox_w": 40,
+                        "bbox_h": 50,
+                        "source": "ai",
+                        "ai_track_id": "11",
+                    },
+                    {
+                        "slot": "p2",
+                        "bbox_x": 0,
+                        "bbox_y": 0,
+                        "bbox_w": 0,
+                        "bbox_h": 0,
+                        "source": "absent",
+                        "ai_track_id": "",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(result["submitted_frame_count"], 1)
+        history = state.list_annotations_for_annotator("annotator_issue_partial_prefix")
+        self.assertEqual(len(history), 1)
+        detail = state.annotation_detail("annotator_issue_partial_prefix", history[0]["annotation_id"])
+        self.assertEqual(detail["frame"]["frame_index"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
