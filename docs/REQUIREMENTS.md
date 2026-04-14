@@ -1,6 +1,6 @@
 # 标注需求入口说明
 
-本项目需求已拆分为七份主文档 + 一份补充设计文档：
+本项目需求已拆分为八份主文档 + 一份补充设计文档：
 
 1. 预标注批处理规范  
    `~/data_annotation/docs/REQUIREMENTS_PRELABEL.md`
@@ -16,6 +16,8 @@
    `~/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
 7. 最终 Annotation 融合导出规范  
    `~/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md`
+8. 轨迹级问题驱动标注提效规范（规划与执行跟踪版）
+   `~/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md`
 
 推荐阅读顺序：
 
@@ -27,6 +29,7 @@
 6. `REQUIREMENTS_ANNOTATION_ANALYSIS.md`
 7. `REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
 8. `REQUIREMENTS_FINAL_ANNOTATION.md`
+9. `REQUIREMENTS_TRAJECTORY_REVIEW.md`
 
 流程顺序：
 
@@ -37,3 +40,4 @@
 5. F 阶段用于对 B 阶段产出的多标注结果做离线一致性分析
 6. G 阶段用于对多标注结果做人工复审与最终裁决
 7. H 阶段用于融合多标注结果并导出最终 annotation
+8. X 文档用于指导 B/G 阶段从逐帧复核逐步升级到轨迹级、风险驱动复核流程
