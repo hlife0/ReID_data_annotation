@@ -700,6 +700,14 @@ select {
   background: #5b3a88;
 }
 
+.source-badge.occluded {
+  background: #8b6b23;
+}
+
+.source-badge.outside {
+  background: #4f5f72;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

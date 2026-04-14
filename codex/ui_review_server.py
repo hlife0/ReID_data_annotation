@@ -29,7 +29,7 @@ DEFAULT_TARGET_VIDEO_STEMS = [
     "20260211_172522",
 ]
 SLOT_NAMES = [f"p{i}" for i in range(1, 8)]
-VALID_SLOT_SOURCES = {"ai", "manual_draw", "manual_param", "absent"}
+VALID_SLOT_SOURCES = {"ai", "manual_draw", "manual_param", "absent", "occluded", "outside"}
 
 FRAME_POOL_COLUMNS = ["video_stem", "frame_index", "timestamp_ms"]
 COUNT_COLUMNS = ["video_stem", "frame_index", "timestamp_ms", "annotation_count"]
@@ -1426,8 +1426,8 @@ class AnnotationState:
         for item in base_slots:
             slot = str(item.get("slot", "")).strip().lower()
             source = str(item.get("source", "")).strip()
-            if source == "absent":
-                expanded.append(empty_slot_record(slot) | {"slot": slot, "source": "absent"})
+            if source in {"absent", "occluded", "outside"}:
+                expanded.append(empty_slot_record(slot) | {"slot": slot, "source": source})
                 continue
             if source == "ai":
                 track_id = str(item.get("ai_track_id", "")).strip()
@@ -1468,8 +1468,8 @@ class AnnotationState:
     ) -> Dict[str, Any]:
         slot = str(item.get("slot", "")).strip().lower()
         source = str(item.get("source", "")).strip()
-        if source == "absent":
-            return empty_slot_record(slot) | {"slot": slot, "source": "absent"}
+        if source in {"absent", "occluded", "outside"}:
+            return empty_slot_record(slot) | {"slot": slot, "source": source}
         if source == "ai":
             expanded = self._expand_slots_for_frame([item], video_stem, frame_index)
             return expanded[0] if expanded else empty_slot_record(slot) | {"slot": slot, "source": "absent"}
@@ -2062,9 +2062,11 @@ class AnnotationState:
                 raise ValueError(f"invalid slot name: {slot_name}")
             source = str(item.get("source", "")).strip()
             if source not in VALID_SLOT_SOURCES:
-                raise ValueError(f"{slot_name} source must be one of ai/manual_draw/manual_param/absent")
+                raise ValueError(
+                    f"{slot_name} source must be one of ai/manual_draw/manual_param/absent/occluded/outside"
+                )
 
-            if source == "absent":
+            if source in {"absent", "occluded", "outside"}:
                 slot_map[slot_name] = {
                     "slot": slot_name,
                     "bbox_x": 0.0,

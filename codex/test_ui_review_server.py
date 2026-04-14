@@ -399,6 +399,33 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         self.assertEqual(expanded[0]["bbox_x"], 20.0)
         self.assertEqual(expanded[0]["bbox_y"], 30.0)
 
+    def test_validate_slots_payload_accepts_occluded_and_outside(self) -> None:
+        state = self._make_state()
+        slots = state._validate_slots_payload(
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 0,
+                    "bbox_y": 0,
+                    "bbox_w": 0,
+                    "bbox_h": 0,
+                    "source": "occluded",
+                    "ai_track_id": "",
+                },
+                {
+                    "slot": "p2",
+                    "bbox_x": 0,
+                    "bbox_y": 0,
+                    "bbox_w": 0,
+                    "bbox_h": 0,
+                    "source": "outside",
+                    "ai_track_id": "",
+                },
+            ]
+        )
+        self.assertEqual(slots[0]["source"], "occluded")
+        self.assertEqual(slots[1]["source"], "outside")
+
     def test_interpolate_manual_slots_linearly_between_two_keyframes(self) -> None:
         state = self._make_state()
         slots = state._interpolate_slot_ranges(

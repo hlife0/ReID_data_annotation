@@ -23,11 +23,15 @@ const I18N = {
     submit_issue_backward: "从当前帧向前应用",
     submit_issue_forward: "从当前帧向后应用",
     submit_issue_range: "整段应用",
+    mark_occluded: "遮挡",
+    mark_outside: "出画",
     src_not_set: "未设置",
     src_ai: "AI",
     src_manual_draw: "手动画框",
     src_manual_param: "参数修改",
     src_absent: "不存在",
+    src_occluded: "遮挡",
+    src_outside: "出画",
     no_ai_box: "该帧无AI框",
     hint_start: "先加载一帧开始标注。",
     hint_loading: "正在加载帧图...",
@@ -98,11 +102,15 @@ const I18N = {
     submit_issue_backward: "Apply Backward",
     submit_issue_forward: "Apply Forward",
     submit_issue_range: "Apply To Issue",
+    mark_occluded: "Occluded",
+    mark_outside: "Outside",
     src_not_set: "not_set",
     src_ai: "ai",
     src_manual_draw: "manual_draw",
     src_manual_param: "manual_param",
     src_absent: "absent",
+    src_occluded: "occluded",
+    src_outside: "outside",
     no_ai_box: "No AI box in this frame",
     hint_start: "Load a frame to start.",
     hint_loading: "Loading frame image...",
@@ -214,6 +222,8 @@ const refs = {
   activeAiButtons: document.getElementById("activeAiButtons"),
   activeDrawBtn: document.getElementById("activeDrawBtn"),
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
+  activeOccludedBtn: document.getElementById("activeOccludedBtn"),
+  activeOutsideBtn: document.getElementById("activeOutsideBtn"),
   setKeyframeAnchorBtn: document.getElementById("setKeyframeAnchorBtn"),
   submitInterpolationBtn: document.getElementById("submitInterpolationBtn"),
   submitIssueBackwardBtn: document.getElementById("submitIssueBackwardBtn"),
@@ -358,6 +368,8 @@ function sourceLabel(source) {
   if (source === "manual_draw") return t("src_manual_draw");
   if (source === "manual_param") return t("src_manual_param");
   if (source === "absent") return t("src_absent");
+  if (source === "occluded") return t("src_occluded");
+  if (source === "outside") return t("src_outside");
   return t("src_not_set");
 }
 
@@ -535,7 +547,9 @@ function sourceClass(source) {
     source === "ai" ||
     source === "manual_draw" ||
     source === "manual_param" ||
-    source === "absent"
+    source === "absent" ||
+    source === "occluded" ||
+    source === "outside"
   ) {
     return source;
   }
@@ -1160,11 +1174,24 @@ function markSlotAbsent(slot) {
   setHintByKey("hint_marked_absent", { slot: slotName(slot) });
 }
 
+function markSlotState(slot, source) {
+  if (!state.frame) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  state.activeSlot = slot;
+  state.drawSlot = null;
+  state.action = null;
+  refs.canvas.style.cursor = "default";
+  setSlotBbox(slot, null, source, "");
+  setHintByKey("hint_marked_absent", { slot: slotName(slot) });
+}
+
 function validateSubmission() {
   for (const slot of state.slotNames) {
     const s = state.slots[slot];
     const slotLabel = slotName(slot);
-    if (s.source === "absent") {
+    if (["absent", "occluded", "outside"].includes(s.source)) {
       continue;
     }
     if (!bboxValid(s.bbox)) {
@@ -1173,7 +1200,7 @@ function validateSubmission() {
     if (s.bbox.w <= 0 || s.bbox.h <= 0) {
       throw new Error(t("err_bbox_wh", { slot: slotLabel }));
     }
-    if (!["ai", "manual_draw", "manual_param", "absent"].includes(s.source)) {
+    if (!["ai", "manual_draw", "manual_param", "absent", "occluded", "outside"].includes(s.source)) {
       throw new Error(t("err_source_invalid", { slot: slotLabel }));
     }
   }
@@ -1181,14 +1208,14 @@ function validateSubmission() {
 
 function personSubmitPayload(slot) {
   const person = state.slots[slot];
-  if (person.source === "absent") {
+  if (["absent", "occluded", "outside"].includes(person.source)) {
     return {
       slot,
       bbox_x: 0,
       bbox_y: 0,
       bbox_w: 0,
       bbox_h: 0,
-      source: "absent",
+      source: person.source,
       ai_track_id: "",
     };
   }
@@ -1596,8 +1623,8 @@ function applySlotsFromAnnotation(slots) {
   }
   for (const item of slots) {
     if (!item || !state.slotNames.includes(item.slot)) continue;
-    if (item.source === "absent") {
-      setSlotBbox(item.slot, null, "absent", "");
+    if (["absent", "occluded", "outside"].includes(item.source)) {
+      setSlotBbox(item.slot, null, item.source, "");
       continue;
     }
     if (!item.bbox_w || !item.bbox_h) {
@@ -1740,6 +1767,12 @@ function initEvents() {
 
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
+  if (refs.activeOccludedBtn) {
+    refs.activeOccludedBtn.addEventListener("click", () => markSlotState(state.activeSlot, "occluded"));
+  }
+  if (refs.activeOutsideBtn) {
+    refs.activeOutsideBtn.addEventListener("click", () => markSlotState(state.activeSlot, "outside"));
+  }
   if (refs.setKeyframeAnchorBtn) {
     refs.setKeyframeAnchorBtn.textContent = t("set_keyframe_anchor");
     refs.setKeyframeAnchorBtn.addEventListener("click", setKeyframeAnchor);
