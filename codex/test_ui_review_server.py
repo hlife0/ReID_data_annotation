@@ -378,6 +378,94 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
         detail = state.annotation_detail("annotator_issue_partial_prefix", history[0]["annotation_id"])
         self.assertEqual(detail["frame"]["frame_index"], 1)
 
+    def test_expand_slots_for_frame_preserves_manual_bbox_without_ai_track(self) -> None:
+        state = self._make_state()
+        expanded = state._expand_slots_for_frame(
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 20,
+                    "bbox_y": 30,
+                    "bbox_w": 40,
+                    "bbox_h": 50,
+                    "source": "manual_param",
+                    "ai_track_id": "",
+                }
+            ],
+            "sample",
+            2,
+        )
+        self.assertEqual(expanded[0]["source"], "manual_param")
+        self.assertEqual(expanded[0]["bbox_x"], 20.0)
+        self.assertEqual(expanded[0]["bbox_y"], 30.0)
+
+    def test_interpolate_manual_slots_linearly_between_two_keyframes(self) -> None:
+        state = self._make_state()
+        slots = state._interpolate_slot_ranges(
+            start_frame=1,
+            end_frame=3,
+            start_slots=[
+                {
+                    "slot": "p1",
+                    "bbox_x": 10,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "manual_param",
+                    "ai_track_id": "",
+                }
+            ],
+            end_slots=[
+                {
+                    "slot": "p1",
+                    "bbox_x": 30,
+                    "bbox_y": 40,
+                    "bbox_w": 50,
+                    "bbox_h": 60,
+                    "source": "manual_param",
+                    "ai_track_id": "",
+                }
+            ],
+        )
+        self.assertEqual(sorted(slots), [1, 2, 3])
+        self.assertEqual(slots[1][0]["bbox_x"], 10.0)
+        self.assertEqual(slots[2][0]["bbox_x"], 20.0)
+        self.assertEqual(slots[3][0]["bbox_x"], 30.0)
+
+    def test_issue_interpolation_submit_writes_interpolated_manual_range(self) -> None:
+        state = self._make_state()
+        result = state.submit_issue_interpolation(
+            "annotator_issue_interp",
+            "sample_issue_001",
+            1,
+            2,
+            start_slots=[
+                {
+                    "slot": "p1",
+                    "bbox_x": 10,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "manual_param",
+                    "ai_track_id": "",
+                }
+            ],
+            end_slots=[
+                {
+                    "slot": "p1",
+                    "bbox_x": 20,
+                    "bbox_y": 30,
+                    "bbox_w": 40,
+                    "bbox_h": 50,
+                    "source": "manual_param",
+                    "ai_track_id": "",
+                }
+            ],
+        )
+        self.assertEqual(result["submitted_frame_count"], 2)
+        history = state.list_annotations_for_annotator("annotator_issue_interp")
+        self.assertEqual(len(history), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

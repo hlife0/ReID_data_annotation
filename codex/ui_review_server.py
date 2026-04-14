@@ -505,6 +505,86 @@ class AnnotationState:
                 "next_issue": next_issue,
             }
 
+    def submit_issue_interpolation(
+        self,
+        annotator_id: str,
+        issue_id: str,
+        start_frame: int,
+        end_frame: int,
+        start_slots: List[Dict[str, Any]],
+        end_slots: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        with self._lock:
+            issue = self.issue_lookup.get(issue_id)
+            if issue is None:
+                raise ValueError("issue not found")
+            start = max(issue.start_frame, min(issue.end_frame, int(start_frame)))
+            end = max(issue.start_frame, min(issue.end_frame, int(end_frame)))
+            if end < start:
+                start, end = end, start
+                start_slots, end_slots = end_slots, start_slots
+
+            frame_records: List[Dict[str, Any]] = []
+            for frame_index in range(start, end + 1):
+                key = (issue.video_stem, frame_index)
+                if key not in self.frame_lookup:
+                    continue
+                rec = self.frame_lookup[key]
+                slots = self._expand_interpolated_slots_for_frame(
+                    video_stem=issue.video_stem,
+                    frame_index=frame_index,
+                    start_frame=start,
+                    end_frame=end,
+                    start_slots=start_slots,
+                    end_slots=end_slots,
+                )
+                frame_records.append(
+                    {
+                        "annotation_id": f"ann_{int(time.time() * 1000)}_{uuid.uuid4().hex[:10]}",
+                        "video_stem": issue.video_stem,
+                        "frame_index": frame_index,
+                        "timestamp_ms": _safe_float(rec.timestamp_ms),
+                        "annotator_id": annotator_id,
+                        "submitted_at": _now_iso(),
+                        "slots_json": json.dumps(slots, ensure_ascii=False),
+                    }
+                )
+
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                for record in frame_records:
+                    key = (record["video_stem"], int(record["frame_index"]))
+                    self._insert_annotation(conn, record)
+                    self._update_track_person_stats(conn, record)
+                    conn.execute(
+                        """
+                        UPDATE frame_counts
+                        SET annotation_count = annotation_count + 1
+                        WHERE video_stem=? AND frame_index=?
+                        """,
+                        (key[0], key[1]),
+                    )
+                if start == issue.start_frame and end == issue.end_frame:
+                    self._mark_issue_resolved(conn, issue.issue_id, annotator_id, "interpolation")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            for record in frame_records:
+                self._append_jsonl_record(record)
+                self._append_reviewed_csv(record)
+            self._sync_counts_csv_from_db()
+            next_issue_record = self._pick_next_issue_unlocked(annotator_id=annotator_id, allow_none=True)
+            next_issue = self._issue_payload(next_issue_record) if next_issue_record is not None else None
+            return {
+                "submitted_frame_count": len(frame_records),
+                "next_issue": next_issue,
+            }
+
     def submit_and_assign_next(
         self,
         annotator_id: str,
@@ -1380,6 +1460,134 @@ class AnnotationState:
             )
         return expanded
 
+    def _expand_single_slot(
+        self,
+        item: Dict[str, Any],
+        video_stem: str,
+        frame_index: int,
+    ) -> Dict[str, Any]:
+        slot = str(item.get("slot", "")).strip().lower()
+        source = str(item.get("source", "")).strip()
+        if source == "absent":
+            return empty_slot_record(slot) | {"slot": slot, "source": "absent"}
+        if source == "ai":
+            expanded = self._expand_slots_for_frame([item], video_stem, frame_index)
+            return expanded[0] if expanded else empty_slot_record(slot) | {"slot": slot, "source": "absent"}
+        return {
+            "slot": slot,
+            "bbox_x": _safe_float(item.get("bbox_x", 0.0)),
+            "bbox_y": _safe_float(item.get("bbox_y", 0.0)),
+            "bbox_w": _safe_float(item.get("bbox_w", 0.0)),
+            "bbox_h": _safe_float(item.get("bbox_h", 0.0)),
+            "source": source,
+            "ai_track_id": str(item.get("ai_track_id", "")).strip(),
+        }
+
+    def _interpolate_slot_ranges(
+        self,
+        start_frame: int,
+        end_frame: int,
+        start_slots: List[Dict[str, Any]],
+        end_slots: List[Dict[str, Any]],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        if end_frame < start_frame:
+            raise ValueError("end_frame must be >= start_frame")
+        start_map = {
+            str(item.get("slot", "")).strip().lower(): item
+            for item in start_slots
+            if isinstance(item, dict)
+        }
+        end_map = {
+            str(item.get("slot", "")).strip().lower(): item
+            for item in end_slots
+            if isinstance(item, dict)
+        }
+        span = max(1, end_frame - start_frame)
+        interpolated: Dict[int, List[Dict[str, Any]]] = {}
+        for frame_index in range(start_frame, end_frame + 1):
+            t = 0.0 if span == 0 else (frame_index - start_frame) / span
+            frame_slots: List[Dict[str, Any]] = []
+            for slot_name in SLOT_NAMES:
+                start_item = start_map.get(slot_name)
+                end_item = end_map.get(slot_name)
+                if not start_item or not end_item:
+                    continue
+                start_source = str(start_item.get("source", "")).strip()
+                end_source = str(end_item.get("source", "")).strip()
+                if start_source in {"manual_draw", "manual_param"} and end_source in {"manual_draw", "manual_param"}:
+                    frame_slots.append(
+                        {
+                            "slot": slot_name,
+                            "bbox_x": _safe_float((1 - t) * float(start_item.get("bbox_x", 0.0)) + t * float(end_item.get("bbox_x", 0.0))),
+                            "bbox_y": _safe_float((1 - t) * float(start_item.get("bbox_y", 0.0)) + t * float(end_item.get("bbox_y", 0.0))),
+                            "bbox_w": _safe_float((1 - t) * float(start_item.get("bbox_w", 0.0)) + t * float(end_item.get("bbox_w", 0.0))),
+                            "bbox_h": _safe_float((1 - t) * float(start_item.get("bbox_h", 0.0)) + t * float(end_item.get("bbox_h", 0.0))),
+                            "source": "manual_param",
+                            "ai_track_id": "",
+                        }
+                    )
+            interpolated[frame_index] = frame_slots
+        return interpolated
+
+    def _expand_interpolated_slots_for_frame(
+        self,
+        video_stem: str,
+        frame_index: int,
+        start_frame: int,
+        end_frame: int,
+        start_slots: List[Dict[str, Any]],
+        end_slots: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        start_map = {
+            str(item.get("slot", "")).strip().lower(): item
+            for item in start_slots
+            if isinstance(item, dict)
+        }
+        end_map = {
+            str(item.get("slot", "")).strip().lower(): item
+            for item in end_slots
+            if isinstance(item, dict)
+        }
+        manual_interp = self._interpolate_slot_ranges(
+            start_frame=start_frame,
+            end_frame=end_frame,
+            start_slots=start_slots,
+            end_slots=end_slots,
+        ).get(frame_index, [])
+        manual_map = {str(item["slot"]).strip().lower(): item for item in manual_interp}
+
+        result: List[Dict[str, Any]] = []
+        midpoint = (start_frame + end_frame) / 2.0
+        for slot_name in SLOT_NAMES:
+            if slot_name in manual_map:
+                result.append(manual_map[slot_name])
+                continue
+            start_item = start_map.get(slot_name)
+            end_item = end_map.get(slot_name)
+            if start_item and end_item:
+                start_source = str(start_item.get("source", "")).strip()
+                end_source = str(end_item.get("source", "")).strip()
+                if start_source == "absent" and end_source == "absent":
+                    result.append(empty_slot_record(slot_name) | {"slot": slot_name, "source": "absent"})
+                    continue
+                if (
+                    start_source == "ai"
+                    and end_source == "ai"
+                    and str(start_item.get("ai_track_id", "")).strip()
+                    and str(start_item.get("ai_track_id", "")).strip() == str(end_item.get("ai_track_id", "")).strip()
+                ):
+                    result.append(self._expand_single_slot(start_item, video_stem, frame_index))
+                    continue
+                chosen = start_item if frame_index <= midpoint else end_item
+                result.append(self._expand_single_slot(chosen, video_stem, frame_index))
+                continue
+            if start_item:
+                result.append(self._expand_single_slot(start_item, video_stem, frame_index))
+                continue
+            if end_item:
+                result.append(self._expand_single_slot(end_item, video_stem, frame_index))
+        return result
+
     def _pick_next_issue_unlocked(
         self,
         annotator_id: str | None = None,
@@ -1957,6 +2165,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_submit()
         if path == "/api/submit_issue":
             return self._handle_submit_issue()
+        if path == "/api/submit_issue_interpolation":
+            return self._handle_submit_issue_interpolation()
         if path == "/api/submit_issue_range":
             return self._handle_submit_issue_range()
         if path == "/api/submit_issue_partial_range":
@@ -2046,6 +2256,36 @@ class UiHandler(BaseHTTPRequestHandler):
             result = self.state.submit_and_assign_next_issue(annotator_id=annotator_id, payload=payload)
         except Exception as exc:
             self.state.logger.error(f"submit_issue failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit_issue_interpolation(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        issue_id = str(payload.get("issue_id", "")).strip()
+        if not issue_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "issue_id is required"},
+            )
+        try:
+            result = self.state.submit_issue_interpolation(
+                annotator_id=annotator_id,
+                issue_id=issue_id,
+                start_frame=int(payload["start_frame"]),
+                end_frame=int(payload["end_frame"]),
+                start_slots=payload["start_slots"],
+                end_slots=payload["end_slots"],
+            )
+        except Exception as exc:
+            self.state.logger.error(
+                f"submit_issue_interpolation failed annotator={annotator_id} issue_id={issue_id}: {exc}"
+            )
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},

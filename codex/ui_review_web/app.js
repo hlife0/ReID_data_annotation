@@ -18,6 +18,8 @@ const I18N = {
     manual_draw: "手动画框",
     draw_new_box: "绘制新框",
     mark_absent: "不存在",
+    set_keyframe_anchor: "设为关键帧起点",
+    submit_interpolation: "插值到当前帧",
     submit_issue_backward: "从当前帧向前应用",
     submit_issue_forward: "从当前帧向后应用",
     submit_issue_range: "整段应用",
@@ -91,6 +93,8 @@ const I18N = {
     manual_draw: "Manual draw",
     draw_new_box: "Draw New Box",
     mark_absent: "Mark Missing",
+    set_keyframe_anchor: "Set Keyframe Start",
+    submit_interpolation: "Interpolate To Here",
     submit_issue_backward: "Apply Backward",
     submit_issue_forward: "Apply Forward",
     submit_issue_range: "Apply To Issue",
@@ -186,6 +190,7 @@ const state = {
   currentIssue: null,
   issues: [],
   issueListVideoStem: "",
+  keyframeAnchor: null,
   dispatchMode: "frame",
   progressTarget: 4000,
 };
@@ -209,6 +214,8 @@ const refs = {
   activeAiButtons: document.getElementById("activeAiButtons"),
   activeDrawBtn: document.getElementById("activeDrawBtn"),
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
+  setKeyframeAnchorBtn: document.getElementById("setKeyframeAnchorBtn"),
+  submitInterpolationBtn: document.getElementById("submitInterpolationBtn"),
   submitIssueBackwardBtn: document.getElementById("submitIssueBackwardBtn"),
   submitIssueForwardBtn: document.getElementById("submitIssueForwardBtn"),
   submitIssueRangeBtn: document.getElementById("submitIssueRangeBtn"),
@@ -375,6 +382,12 @@ function updateActionLabels() {
   }
   if (refs.submitIssueBackwardBtn) {
     refs.submitIssueBackwardBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.setKeyframeAnchorBtn) {
+    refs.setKeyframeAnchorBtn.hidden = state.dispatchMode !== "issue";
+  }
+  if (refs.submitInterpolationBtn) {
+    refs.submitInterpolationBtn.hidden = state.dispatchMode !== "issue";
   }
 }
 
@@ -1449,6 +1462,67 @@ async function submitIssueBackwardRange() {
   }
 }
 
+function cloneCurrentSlots() {
+  return state.slotNames.map((slot) => personSubmitPayload(slot));
+}
+
+function setKeyframeAnchor() {
+  if (!state.currentIssue || !state.frame) {
+    return;
+  }
+  state.keyframeAnchor = {
+    issueId: state.currentIssue.issue_id,
+    frameIndex: state.frame.frame_index,
+    slots: cloneCurrentSlots(),
+  };
+  showToast("已记录关键帧起点");
+}
+
+async function submitInterpolation() {
+  if (!state.currentIssue || !state.frame || !state.keyframeAnchor) {
+    showToast("请先设置关键帧起点", true);
+    return;
+  }
+  if (state.keyframeAnchor.issueId !== state.currentIssue.issue_id) {
+    showToast("关键帧起点不属于当前问题", true);
+    return;
+  }
+  try {
+    validateSubmission();
+  } catch (err) {
+    showToast(err.message, true);
+    return;
+  }
+  if (refs.submitInterpolationBtn) {
+    refs.submitInterpolationBtn.disabled = true;
+  }
+  try {
+    const result = await postJson("/api/submit_issue_interpolation", {
+      annotator_id: annotatorId(),
+      issue_id: state.currentIssue.issue_id,
+      start_frame: state.keyframeAnchor.frameIndex,
+      end_frame: state.frame.frame_index,
+      start_slots: state.keyframeAnchor.slots,
+      end_slots: cloneCurrentSlots(),
+    });
+    if (result.next_issue) {
+      applyIssuePayload(result.next_issue, { isAssignment: true });
+      loadIssues({ silent: true });
+    } else {
+      loadIssues({ silent: true });
+    }
+    loadHistory({ silent: true });
+    state.keyframeAnchor = null;
+    showToast(`已插值应用 ${result.submitted_frame_count} 帧`);
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.submitInterpolationBtn) {
+      refs.submitInterpolationBtn.disabled = false;
+    }
+  }
+}
+
 async function getJson(url) {
   const res = await fetch(url, { cache: "no-store" });
   const payload = await res.json().catch(() => ({}));
@@ -1666,6 +1740,14 @@ function initEvents() {
 
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
+  if (refs.setKeyframeAnchorBtn) {
+    refs.setKeyframeAnchorBtn.textContent = t("set_keyframe_anchor");
+    refs.setKeyframeAnchorBtn.addEventListener("click", setKeyframeAnchor);
+  }
+  if (refs.submitInterpolationBtn) {
+    refs.submitInterpolationBtn.textContent = t("submit_interpolation");
+    refs.submitInterpolationBtn.addEventListener("click", submitInterpolation);
+  }
   if (refs.submitIssueBackwardBtn) {
     refs.submitIssueBackwardBtn.textContent = t("submit_issue_backward");
     refs.submitIssueBackwardBtn.addEventListener("click", submitIssueBackwardRange);
