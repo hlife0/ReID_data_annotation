@@ -34,9 +34,9 @@
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 
-历史 `issue-mode` 文档已归档：
+历史轨迹复核文档已归档到：
 
-- [archive/legacy_issue_mode/ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/archive/legacy_issue_mode/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [archive/legacy_segment_mode/README.md](/home/hrli/data_annotation/docs/archive/legacy_segment_mode/README.md)
 
 ---
 
@@ -154,8 +154,6 @@ cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python -m unittest \
   codes.test_repo_layout \
   codes.test_ui_review_server \
-  codes.test_review_propagation \
-  codes.test_process_review_issue_prep \
   codes.test_process_segment_review_prep \
   codes.test_segment_review_server
 ```

@@ -1,6 +1,6 @@
 # Legacy Issue-Mode Archive
 
-本目录存放已经退出主线的历史 `issue-mode` 设计文档。
+本目录存放已经退出主线的历史复核设计文档。
 
 这些文档保留的原因是：
 

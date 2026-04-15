@@ -414,12 +414,10 @@ representative_frame = floor((start_frame + end_frame) / 2)
 
 因此：
 
-- `issue_pool`
-- `next_issue`
-- `issue_detail`
-- `submit_issue_*`
-- `issue_reviews`
-- `issue_keyframe_edits`
+- 历史问题池产物
+- 历史问题派单接口
+- 历史问题提交接口
+- 历史问题完成态表
 
 都不再是主线概念。
 
@@ -428,7 +426,7 @@ representative_frame = floor((start_frame + end_frame) / 2)
 为避免一次性切换引起服务崩溃，迁移时允许短暂保留旧结构，但要求：
 
 1. README 主入口必须切到段模式
-2. 新文档不得继续以 issue 为主语义
+2. 新文档不得继续以旧问题池语义为主语义
 3. 新服务默认只暴露段模式接口
 
 ---

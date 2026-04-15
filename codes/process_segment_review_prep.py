@@ -9,11 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
-import process_review_issue_prep as issue_prep
+import segment_prep_common as common
 
 
-LOW_SCORE_THRESHOLD = issue_prep.LOW_SCORE_THRESHOLD
-HIGH_OVERLAP_IOU = issue_prep.HIGH_OVERLAP_IOU
+LOW_SCORE_THRESHOLD = 0.6
+HIGH_OVERLAP_IOU = 0.25
 
 
 @dataclass(frozen=True)
@@ -41,12 +41,12 @@ def load_frame_timestamps(csv_path: Path) -> Dict[int, float]:
     return dict(sorted(rows.items()))
 
 
-def is_simple_frame(items: List[issue_prep.Detection]) -> bool:
+def is_simple_frame(items: List[common.Detection]) -> bool:
     if any(item.score < LOW_SCORE_THRESHOLD for item in items):
         return False
     for idx, det_a in enumerate(items):
         for det_b in items[idx + 1 :]:
-            if issue_prep.iou_xywh(det_a, det_b) > HIGH_OVERLAP_IOU:
+            if common.iou_xywh(det_a, det_b) > HIGH_OVERLAP_IOU:
                 return False
     return True
 
@@ -55,9 +55,9 @@ def representative_frame(start_frame: int, end_frame: int) -> int:
     return (start_frame + end_frame) // 2
 
 
-def build_segments(task: issue_prep.TaskInfo, detections: List[issue_prep.Detection]) -> Dict[str, Any]:
+def build_segments(task: common.TaskInfo, detections: List[common.Detection]) -> Dict[str, Any]:
     timestamps = load_frame_timestamps(Path(task.timestamp_path))
-    by_frame = issue_prep.group_by_frame(detections)
+    by_frame = common.group_by_frame(detections)
     frame_indices = list(timestamps)
     segments: List[SegmentRecord] = []
 
@@ -163,7 +163,7 @@ def run_segment_review_prep(batch_dir: Path) -> Dict[str, Any]:
     segment_prep_dir = batch_dir / "segment_prep"
     segment_prep_dir.mkdir(parents=True, exist_ok=True)
 
-    tasks = issue_prep.load_tasks(batch_dir)
+    tasks = common.load_tasks(batch_dir)
     summary: Dict[str, Any] = {
         "batch_dir": str(batch_dir),
         "video_count": 0,
@@ -179,7 +179,7 @@ def run_segment_review_prep(batch_dir: Path) -> Dict[str, Any]:
     for task in tasks:
         if not task.pseudo_label_path.exists():
             continue
-        detections = issue_prep.load_detections(task.pseudo_label_path)
+        detections = common.load_detections(task.pseudo_label_path)
         payload = build_segments(task, detections)
 
         (segment_prep_dir / f"{task.video_stem}.segments.json").write_text(
