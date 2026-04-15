@@ -1,43 +1,80 @@
-# 标注需求入口说明
+# 需求文档入口说明
 
-本项目需求已拆分为八份主文档 + 一份补充设计文档：
+当前文档体系里，最重要的已经不是旧的单阶段说明，而是：
 
-1. 预标注批处理规范  
-   `~/data_annotation/docs/REQUIREMENTS_PRELABEL.md`
-2. UI 双人标注与复标分发规范  
-   `~/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md`
-3. 双 IMU 静止/运动比值分析与人物对应辅助规范  
-   `~/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md`
-4. 基于历史 AI Track ID 的自动推荐规范  
-   `~/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md`
-5. 标注结果分析与 Dice 折线图规范  
-   `~/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md`
-6. 标注结果复审 UI 规范  
-   `~/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
-7. 最终 Annotation 融合导出规范  
-   `~/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md`
-8. 轨迹级问题驱动标注提效规范（规划与执行跟踪版）
-   `~/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md`
+- 当前系统现在长什么样
+- 当前轨迹级 review 主线推进到了哪里
+- 当前 issue / 风险分层是怎么工作的
 
-推荐阅读顺序：
+如果你只想最快建立全局理解，推荐阅读顺序如下。
 
-1. `README.md`（快速上手与脚本入口）
-2. `REQUIREMENTS_PRELABEL.md`
-3. `REQUIREMENTS_UI_REVIEW.md`
-4. `REQUIREMENTS_IMU_MAPPING.md`
-5. `REQUIREMENTS_TRACK_RECOMMENDATION.md`
-6. `REQUIREMENTS_ANNOTATION_ANALYSIS.md`
-7. `REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md`
-8. `REQUIREMENTS_FINAL_ANNOTATION.md`
-9. `REQUIREMENTS_TRAJECTORY_REVIEW.md`
+---
 
-流程顺序：
+## 推荐阅读顺序
 
-1. 先执行预标注阶段（A）
-2. 再执行 UI 标注阶段（B）
-3. 最后执行 IMU 映射分析阶段（C）
-4. D 阶段作为 B 阶段增强功能，独立开关
-5. F 阶段用于对 B 阶段产出的多标注结果做离线一致性分析
-6. G 阶段用于对多标注结果做人工复审与最终裁决
-7. H 阶段用于融合多标注结果并导出最终 annotation
-8. X 文档用于指导 B/G 阶段从逐帧复核逐步升级到轨迹级、风险驱动复核流程
+1. [README.md](/home/hrli/data_annotation/docs/README.md)
+   - 当前仓库入口、目录、命令和正式 batch
+2. [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
+   - 当前主控文档，描述 R0-R6 推进状态
+3. [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+   - 当前 issue 生成、green/auto-pass/QA、提交与传播算法
+4. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+   - 当前 review/admin 栈的实际运行形态
+5. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+   - 给标注员的界面使用说明
+
+---
+
+## 其余文档按主题分组
+
+### 当前主线
+
+- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
+- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+- [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+
+### A 阶段 / 预标注
+
+- [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
+
+### C 阶段 / IMU 映射辅助
+
+- [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
+- [C_STAGE_IMU_MAPPING_ANALYSIS.md](/home/hrli/data_annotation/docs/C_STAGE_IMU_MAPPING_ANALYSIS.md)
+
+### 其他增强与下游
+
+- [REQUIREMENTS_TRACK_RECOMMENDATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md)
+- [REQUIREMENTS_ANNOTATION_ANALYSIS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md)
+- [REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md)
+- [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)
+
+---
+
+## 当前最需要记住的事实
+
+1. 当前统一代码目录是 `./codes/`
+2. 当前正式 batch 是 `./annotation/batch_20260413_v01`
+3. 当前默认 review 工作单位是 `issue`，不是单帧
+4. 当前 review 重点是：
+   - issue-mode
+   - 关键帧
+   - 智能传播
+   - 红黄绿风险分层
+   - green 自动通过 + QA 抽样
+
+如果你发现某份旧文档还在强烈强调：
+
+- 固定双人 `P1/P2`
+- 纯逐帧工作流
+- `codes/` 以外的旧代码目录名称
+- 旧 batch 路径
+
+请优先以：
+
+- [README.md](/home/hrli/data_annotation/docs/README.md)
+- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
+- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+
+为准。

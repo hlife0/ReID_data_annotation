@@ -22,8 +22,8 @@
 
 建议新增：
 
-1. 后端服务：`./codex/ui_review_result_server.py`
-2. 前端页面：`./codex/ui_review_result_web/`
+1. 后端服务：`./codes/ui_review_result_server.py`
+2. 前端页面：`./codes/ui_review_result_web/`
 
 默认端口：`10088`
 

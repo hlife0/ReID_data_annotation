@@ -12,20 +12,20 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — stabilize slot payload validation, annotation detail/export shape, and remove remaining hardcoded dual-slot assumptions that affect current review flow.
-- Modify: `codex/ui_admin_server.py` — keep admin APIs aligned with generic slot summaries and frame detail rendering.
-- Modify: `codex/ui_review_web/app.js` — finish dynamic slot UI behavior, remove stale P1/P2 language, and keep editing/submit flows consistent.
-- Modify: `codex/ui_review_web/index.html` — keep compact slot layout and generic copy.
-- Modify: `codex/ui_review_web/styles.css` — preserve large left canvas and compress the right editor for many slots.
-- Modify: `codex/ui_admin_web/app.js` — remove stale P1/P2-specific labels in the admin UI.
-- Create: `codex/test_ui_review_server.py` — backend regression tests for dynamic-slot assignment, submit, edit, and export behavior.
+- Modify: `codes/ui_review_server.py` — stabilize slot payload validation, annotation detail/export shape, and remove remaining hardcoded dual-slot assumptions that affect current review flow.
+- Modify: `codes/ui_admin_server.py` — keep admin APIs aligned with generic slot summaries and frame detail rendering.
+- Modify: `codes/ui_review_web/app.js` — finish dynamic slot UI behavior, remove stale P1/P2 language, and keep editing/submit flows consistent.
+- Modify: `codes/ui_review_web/index.html` — keep compact slot layout and generic copy.
+- Modify: `codes/ui_review_web/styles.css` — preserve large left canvas and compress the right editor for many slots.
+- Modify: `codes/ui_admin_web/app.js` — remove stale P1/P2-specific labels in the admin UI.
+- Create: `codes/test_ui_review_server.py` — backend regression tests for dynamic-slot assignment, submit, edit, and export behavior.
 
 ### Task 1: Add backend regression tests for dynamic-slot review state
 
 **Files:**
-- Create: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Create: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -107,7 +107,7 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
     def test_assignment_submit_and_edit_round_trip_with_dynamic_slots(self) -> None:
         state = mod.AnnotationState(
             batch_dir=self.batch_dir,
-            static_dir=Path("codex/ui_review_web"),
+            static_dir=Path("codes/ui_review_web"),
             seed=123,
             reset_storage=True,
             frame_cache_dir=None,
@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because the current review state still has dynamic-slot regressions or missing compatibility behavior.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -175,23 +175,23 @@ Implement only the backend changes needed to make the new regression test pass. 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/test_ui_review_server.py codex/ui_review_server.py
+git add codes/test_ui_review_server.py codes/ui_review_server.py
 git commit -m "Stabilize dynamic slot review state"
 ```
 
 ### Task 2: Finish the review frontend migration to a compact shared P1-P7 editor
 
 **Files:**
-- Modify: `codex/ui_review_web/app.js`
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/styles.css`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/styles.css`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -199,7 +199,7 @@ Use a lightweight regression target instead of a browser harness: identify stale
 
 Run:
 ```bash
-rg -n "P1/P2|历史推荐 P1/P2|Applied historical P1/P2|双人框标注复核|双人" codex/ui_review_web/app.js codex/ui_review_web/index.html codex/ui_review_web/styles.css
+rg -n "P1/P2|历史推荐 P1/P2|Applied historical P1/P2|双人框标注复核|双人" codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css
 ```
 Expected: FINDS stale dual-slot strings before cleanup.
 
@@ -207,7 +207,7 @@ Expected: FINDS stale dual-slot strings before cleanup.
 
 Run:
 ```bash
-node --check codex/ui_review_web/app.js
+node --check codes/ui_review_web/app.js
 ```
 Expected: PASS syntax-wise, while the `rg` command still reports stale dual-slot assumptions to remove.
 
@@ -224,8 +224,8 @@ Make the frontend consistently dynamic-slot-first:
 
 Run:
 ```bash
-rg -n "P1/P2|历史推荐 P1/P2|Applied historical P1/P2|双人框标注复核|双人" codex/ui_review_web/app.js codex/ui_review_web/index.html codex/ui_review_web/styles.css
-node --check codex/ui_review_web/app.js
+rg -n "P1/P2|历史推荐 P1/P2|Applied historical P1/P2|双人框标注复核|双人" codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css
+node --check codes/ui_review_web/app.js
 ```
 Expected:
 - `rg` returns no stale dual-slot UI strings.
@@ -234,22 +234,22 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/app.js codex/ui_review_web/index.html codex/ui_review_web/styles.css
+git add codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css
 git commit -m "Finish compact dynamic slot review UI"
 ```
 
 ### Task 3: Align admin summaries and review metadata with generic slots
 
 **Files:**
-- Modify: `codex/ui_admin_server.py`
-- Modify: `codex/ui_admin_web/app.js`
-- Test: `codex/ui_admin_web/app.js`
+- Modify: `codes/ui_admin_server.py`
+- Modify: `codes/ui_admin_web/app.js`
+- Test: `codes/ui_admin_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "th_p1|th_p2|P1 source|P2 source|P1 来源|P2 来源" codex/ui_admin_web/app.js codex/ui_admin_web/index.html
+rg -n "th_p1|th_p2|P1 source|P2 source|P1 来源|P2 来源" codes/ui_admin_web/app.js codes/ui_admin_web/index.html
 ```
 Expected: FINDS stale dual-slot admin labels.
 
@@ -257,7 +257,7 @@ Expected: FINDS stale dual-slot admin labels.
 
 Run:
 ```bash
-node --check codex/ui_admin_web/app.js
+node --check codes/ui_admin_web/app.js
 ```
 Expected: PASS syntax-wise, while `rg` still reports stale labels.
 
@@ -269,8 +269,8 @@ Replace the stale admin labels with generic slot-oriented language and ensure re
 
 Run:
 ```bash
-rg -n "th_p1|th_p2|P1 source|P2 source|P1 来源|P2 来源" codex/ui_admin_web/app.js codex/ui_admin_web/index.html
-node --check codex/ui_admin_web/app.js
+rg -n "th_p1|th_p2|P1 source|P2 source|P1 来源|P2 来源" codes/ui_admin_web/app.js codes/ui_admin_web/index.html
+node --check codes/ui_admin_web/app.js
 ```
 Expected:
 - `rg` returns no stale dual-slot admin labels.
@@ -279,15 +279,15 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_admin_web/app.js codex/ui_admin_server.py
+git add codes/ui_admin_web/app.js codes/ui_admin_server.py
 git commit -m "Align admin UI with generic slot summaries"
 ```
 
 ### Task 4: Run service-level verification against the formal batch
 
 **Files:**
-- Modify: `codex/ui_review_server.py`
-- Modify: `codex/ui_admin_server.py`
+- Modify: `codes/ui_review_server.py`
+- Modify: `codes/ui_admin_server.py`
 - Test: `annotation/batch_20260413_v01`
 
 - [ ] **Step 1: Write the failing test**
@@ -295,8 +295,8 @@ git commit -m "Align admin UI with generic slot summaries"
 Run the live services against the formal batch and capture the exact API surface we need:
 
 ```bash
-nohup .venv/bin/python codex/ui_review_server.py --batch-dir ./annotation/batch_20260413_v01 --port 10086 --frame-cache-disk --frame-cache-max 512 >/tmp/ui_review_10086.log 2>&1 &
-nohup .venv/bin/python codex/ui_admin_server.py --batch-dir ./annotation/batch_20260413_v01 --port 10087 >/tmp/ui_admin_10087.log 2>&1 &
+nohup .venv/bin/python codes/ui_review_server.py --batch-dir ./annotation/batch_20260413_v01 --port 10086 --frame-cache-disk --frame-cache-max 512 >/tmp/ui_review_10086.log 2>&1 &
+nohup .venv/bin/python codes/ui_admin_server.py --batch-dir ./annotation/batch_20260413_v01 --port 10087 >/tmp/ui_admin_10087.log 2>&1 &
 sleep 2
 curl -s http://127.0.0.1:10086/api/next_frame -X POST -H 'Content-Type: application/json' -d '{"annotator_id":"annotator_smoke"}'
 curl -s 'http://127.0.0.1:10086/api/my_annotations?annotator_id=annotator_smoke'
@@ -316,9 +316,9 @@ Adjust the review/admin server behavior only as needed so the formal batch retur
 
 Run:
 ```bash
-.venv/bin/python codex/test_ui_review_server.py
-node --check codex/ui_review_web/app.js
-node --check codex/ui_admin_web/app.js
+.venv/bin/python codes/test_ui_review_server.py
+node --check codes/ui_review_web/app.js
+node --check codes/ui_admin_web/app.js
 curl -s http://127.0.0.1:10086/api/status
 curl -s http://127.0.0.1:10086/api/next_frame -X POST -H 'Content-Type: application/json' -d '{"annotator_id":"annotator_smoke"}'
 curl -s 'http://127.0.0.1:10086/api/my_annotations?annotator_id=annotator_smoke'
@@ -332,6 +332,6 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/ui_admin_server.py codex/ui_review_web/app.js codex/ui_review_web/index.html codex/ui_review_web/styles.css codex/ui_admin_web/app.js codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/ui_admin_server.py codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css codes/ui_admin_web/app.js codes/test_ui_review_server.py
 git commit -m "Verify dynamic slot review stack on formal batch"
 ```

@@ -19,7 +19,7 @@
 
 ## 2. 当前实现入口
 
-主脚本：`./codex/process_annotation_analysis.py`
+主脚本：`./codes/process_annotation_analysis.py`
 
 说明：
 

@@ -10,9 +10,9 @@
 
 本文档对应的是**当前代码**，不是理想规划稿。主要实现位置：
 
-- [codex/process_review_issue_prep.py](/home/hrli/data_annotation/codex/process_review_issue_prep.py)
-- [codex/ui_review_server.py](/home/hrli/data_annotation/codex/ui_review_server.py)
-- [codex/review_propagation.py](/home/hrli/data_annotation/codex/review_propagation.py)
+- [codes/process_review_issue_prep.py](/home/hrli/data_annotation/codes/process_review_issue_prep.py)
+- [codes/ui_review_server.py](/home/hrli/data_annotation/codes/ui_review_server.py)
+- [codes/review_propagation.py](/home/hrli/data_annotation/codes/review_propagation.py)
 - [docs/REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
 
 ---
@@ -72,7 +72,7 @@ flowchart TD
 
 ### 3.1 输入是什么
 
-离线脚本 [`process_review_issue_prep.py`](/home/hrli/data_annotation/codex/process_review_issue_prep.py) 会读取：
+离线脚本 [`process_review_issue_prep.py`](/home/hrli/data_annotation/codes/process_review_issue_prep.py) 会读取：
 
 - `manifests/annotation_tasks.csv`
 - `pseudo_labels/<video_stem>.auto.csv`

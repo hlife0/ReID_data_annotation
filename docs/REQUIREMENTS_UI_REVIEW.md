@@ -1,246 +1,319 @@
-# 需求文档 B：UI 双人标注与复标分发规范（实现对齐版）
+# 需求文档 B：UI Review / Issue-Mode 复核规范（当前实现版）
 
-## 1. 目标
+本文件描述当前 review/admin 栈的**实际实现**，重点是：
 
-本阶段负责：逐帧 UI 标注、任务分发、结果持久化与导出。
+- 当前入口在哪里
+- 当前 review UI 的工作单位是什么
+- 当前支持哪些在线接口
+- 当前的前后端能力边界是什么
 
-交付目标：
+如果你想看跨阶段主线，请先读：
 
-1. 每次请求随机分配一帧，优先 `annotation_count < 3`。
-2. 支持 `P1(绿衣服)` 与 `P2(灰衣服)` 双槽位标注。
-3. 每次提交追加写入并原子更新计数。
-4. 达到 3 次后仍继续可分配、可追加。
+- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
+
+如果你想看 `issue` 算法和风险逻辑，请看：
+
+- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+
+---
+
+## 1. 当前目标
+
+当前 review UI 的默认目标已经从：
+
+- 逐帧双人复核
+
+转成：
+
+- issue-mode 问题点驱动复核
+- 轨迹级工作单位
+- 关键帧修正 + 智能传播
+
+也就是说，当前系统的默认工作单位是：
+
+- `issue`
+
+而不是：
+
+- 单帧
 
 ---
 
 ## 2. 当前实现入口
 
-- 标注服务：`./codex/ui_review_server.py`（默认端口 `10086`）
-- 管理面板：`./codex/ui_admin_server.py`（默认端口 `10087`）
+- review 服务：
+  - `./codes/ui_review_server.py`
+  - 默认端口 `10086`
+- admin 服务：
+  - `./codes/ui_admin_server.py`
+  - 默认端口 `10087`
+- review 前端：
+  - `./codes/ui_review_web/`
+- admin 前端：
+  - `./codes/ui_admin_web/`
 
 ---
 
-## 3. 输入范围与路径约束
-
-主输入：
-
-- `./data/required/<video_stem>/video/<video_stem>_retimed.mp4`
-- `./data/required/<video_stem>/video/<video_stem>_frame_timestamps_retimed.csv`
-- `./annotation/batch_<YYYYMMDD>_<vNN>/pseudo_labels/<video_stem>.auto.csv`
-
-路径约束：
-
-1. 以当前工作目录相对路径为主。
-2. 数据盘通过 `./data` 软链接访问。
-3. `./data/required/*` 仅只读，不写入。
-
----
-
-## 4. 批次目录与产物
+## 3. 当前依赖的批次产物
 
 ```text
-./annotation/batch_<YYYYMMDD>_<vNN>/
+./annotation/batch_<...>/
+├── manifests/annotation_tasks.csv
+├── pseudo_labels/<video_stem>.auto.csv
+├── review_prep/
+│   ├── <video_stem>.track_summary.json
+│   ├── <video_stem>.risk_spans.json
+│   ├── <video_stem>.issue_pool.csv
+│   └── review_prep_summary.json
 ├── ui_tasks/
 │   ├── frame_pool.csv
 │   ├── frame_annotation_counts.csv
 │   ├── assignment_log.csv
 │   └── ui_review.sqlite3
 ├── reviewed_raw/
-│   └── <video_stem>.frame_records.jsonl
 ├── reviewed/
-│   └── <video_stem>.reviewed.csv
 └── logs/
-    ├── run.log
-    └── errors.log
 ```
 
-说明：
+当前正式批次：
 
-1. SQLite 为主存储，CSV/JSONL 为可读导出与同步产物。
-2. 记录按追加策略保存，不覆盖历史提交。
-
----
-
-## 5. 本批次目标视频
-
-固定目标：
-
-- `20260211_171423`
-- `20260211_171724`
-- `20260211_172257`
-- `20260211_172522`
+- `./annotation/batch_20260413_v01`
 
 ---
 
-## 6. 前端交互规范（实现）
+## 4. 当前 review UI 的工作模型
 
-### 6.1 页面结构
+### 4.1 已保留的 frame-mode
 
-页面包含：
+系统仍然保留：
 
-1. Header（标注员ID、跳过、提交并下一帧、语言切换）。
-2. 状态条（视频、帧号、时间戳、当前累计标注次数）。
-3. 画布区（帧图 + AI 框 + 用户框）。
-4. 控制区（P1/P2 来源、AI 应用、手动画框、参数输入）。
+- `next_frame`
+- `submit`
 
-### 6.2 双人物槽位
+所以旧的逐帧模式没有被删除。
 
-- `P1(绿衣服)`
-- `P2(灰衣服)`
+### 4.2 当前推荐的 issue-mode
 
-提交时必须同时给出 P1/P2 的有效状态（可为“存在框”或“不存在”）。
+当前更推荐用：
 
-### 6.3 每个槽位支持 4 种方式
+- `next_issue`
+- `issue_detail`
+- `issue_frame`
+- `submit_issue_propagation`
 
-1. 应用 AI 框（按 `track_id` 按钮）。
-2. 手动画框。
-3. 参数输入框直接改 `bbox_x/y/w/h`。
-4. 点击“`不存在`”（`source=absent`）。
+在 issue-mode 下，用户默认流程是：
 
-### 6.4 画布交互与同步
-
-1. 用户框支持拖动与八方向缩放。
-2. 框操作实时回写参数输入框。
-3. 参数输入实时反向更新画布框。
-4. AI 应用/手绘/不存在状态都实时同步到来源与输入区。
-
-### 6.5 渲染规则
-
-1. AI 框：虚线、按 `track_id` 着色、显示 `id`。
-2. 用户框：实线、可交互。
-3. P1/P2 颜色固定且可区分。
+1. 领取一条 issue
+2. 查看问题区间和相关轨迹
+3. 记录关键帧
+4. 用传播把修改扩成整段
+5. 进入下一条 issue
 
 ---
 
-## 6.6 标注历史与修订（新增）
+## 5. 当前页面结构
 
-为支持标注员自查与纠错，UI 提供左侧历史栏：
+当前 review 页面主要分为：
 
-1. 仅展示当前 `annotator_id` 的提交记录，按 `submitted_at` 从近到远排序。
-2. 点击条目进入编辑模式，加载对应帧与历史框。
-3. 编辑后保存更新原记录，不改变数据库结构与计数逻辑。
-4. 历史栏可折叠到最左侧，仅保留收起按钮。
-
-## 6.7 个人进度条（新增）
-
-在 Header 中显示当前标注员进度条：
-
-1. 进度 = 当前标注员提交数 / 目标数（目标数默认 4000）。
-2. 切换标注员 ID 后自动刷新进度。
-
----
-
-## 7. 后端分发与持久化规范（实现）
-
-### 7.1 分帧策略
-
-`POST /api/next_frame`：
-
-1. 优先随机选择 `annotation_count < 3` 帧。
-2. 若全部 `>=3`，从最小计数组随机。
-3. 永不因“达到 3 次”拒绝继续分配。
-
-### 7.2 提交流程
-
-`POST /api/submit`：
-
-1. 校验 `video_stem + frame_index + timestamp_ms` 对齐任务池。
-2. 校验 P1/P2：
-- `source in {ai, manual_draw, manual_param}` 时，要求 `bbox_w>0` 且 `bbox_h>0`。
-- `source=absent` 时，写入 `bbox_x=y=w=h=0`。
-3. 在事务内：插入 annotation + 计数 `+1` + 分配下一帧。
-4. 返回 `submitted` 与 `next_frame`。
-
-### 7.3 持久化字段（核心）
-
-- `annotation_id`
-- `video_stem`
-- `frame_index`
-- `timestamp_ms`
-- `annotator_id`
-- `submitted_at`
-- `p1_bbox_x/p1_bbox_y/p1_bbox_w/p1_bbox_h`
-- `p1_source`（`ai/manual_draw/manual_param/absent`）
-- `p1_ai_track_id`
-- `p2_bbox_x/p2_bbox_y/p2_bbox_w/p2_bbox_h`
-- `p2_source`（`ai/manual_draw/manual_param/absent`）
-- `p2_ai_track_id`
-
-### 7.4 自动推荐（D 阶段扩展）
-
-若启用 D 阶段自动推荐：
-
-1. `/api/next_frame` 的 `frame` 会额外返回 `recommendations` 字段（详见 `REQUIREMENTS_TRACK_RECOMMENDATION.md`）。
-2. UI 在用户未操作前，可自动应用推荐的 `track_id` 到 P1/P2。
-3. 统计表 `track_person_stats` 由提交时更新维护。
-
-### 7.5 标注修订 API（新增）
-
-新增接口：
-
-1. `GET /api/my_annotations?annotator_id=...`  
-   返回该标注员的历史记录（按提交时间倒序）。
-2. `GET /api/annotation_detail?annotator_id=...&annotation_id=...`  
-   返回标注记录与对应帧信息，用于进入编辑模式。
-3. `POST /api/update_annotation`  
-   更新已存在的 annotation 记录（仅允许同一 `annotator_id` 修改）。
+1. 顶部工具栏
+   - annotator id
+   - `下一问题点`
+   - `跳过当前帧`
+   - `提交并下一问题点`
+2. 状态条
+   - video
+   - frame
+   - timestamp
+   - annotation count
+3. issue 摘要条
+   - severity
+   - issue id
+   - issue range
+   - issue reasons
+   - issue timeline
+4. 左侧主画布
+   - AI boxes
+   - 用户当前槽位结果
+5. 右侧问题列表
+6. 右侧轨迹工作台
+   - issue tracks
+   - keyframe list
+7. 右侧共享槽位编辑器
 
 ---
 
-## 8. 导出规范
+## 6. 当前槽位模型
 
-- 实时追加：`reviewed_raw/*.frame_records.jsonl` 与 `reviewed/*.reviewed.csv`
-- 批量重导出：`POST /api/export` 按 DB 重建上述文件
+当前已不再写死 `P1/P2`，而是动态槽位：
+
+- `p1` 到 `p7`
+
+前端和后端都按动态 `slot_names` 工作。
+
+每个槽位当前允许的 `source`：
+
+- `ai`
+- `manual_draw`
+- `manual_param`
+- `absent`
+- `occluded`
+- `outside`
 
 ---
 
-## 9. 验收标准（实现对齐）
+## 7. 当前后端接口
 
-1. UI 支持 P1/P2 双槽位与 4 种标注方式（含“不存在”）。
-2. 框拖动/缩放与参数输入双向同步可用。
-3. 提交成功后可自动进入下一帧。
-4. 计数可统计，且可超过 3 次继续分配。
-5. 产物路径、命名与字段完整可读。
+### 7.1 frame-mode
+
+- `POST /api/next_frame`
+- `POST /api/submit`
+
+### 7.2 issue-mode 读取
+
+- `POST /api/next_issue`
+- `GET /api/issues`
+- `GET /api/issue_detail`
+- `GET /api/issue_frame`
+
+### 7.3 issue-mode 提交
+
+- `POST /api/submit_issue`
+  - 只提当前帧，但当前实现会直接 resolve 整个 issue
+- `POST /api/submit_issue_range`
+  - 当前结果扩到整个 issue
+- `POST /api/submit_issue_partial_range`
+  - 当前结果扩到 issue 子区间
+- `POST /api/submit_issue_interpolation`
+  - 两关键帧之间线性插值
+- `POST /api/submit_issue_propagation`
+  - 多关键帧 + AI 轨迹跟随传播
+
+### 7.4 历史与修订
+
+- `GET /api/my_annotations`
+- `GET /api/annotation_detail`
+- `POST /api/update_annotation`
+
+### 7.5 导出
+
+- `POST /api/export`
 
 ---
 
-## 10. 常用命令
+## 8. 当前轨迹工作台能力
 
-### 10.1 初始化（可选，清空并重建）
+当前前端已经支持：
+
+- issue list
+- issue timeline
+- issue 内上一帧 / 下一帧
+- issue tracks 卡片
+- keyframe list
+- `Merge` 到当前槽位
+- `切断轨迹`
+- `重新出现`
+- `遮挡`
+- `出画`
+- `智能传播整段`
+
+但当前仍然属于：
+
+- issue 内工作台
+
+还不是：
+
+- 全局跨 issue 轨迹编辑器
+
+---
+
+## 9. 当前传播能力
+
+传播实现见：
+
+- `./codes/review_propagation.py`
+
+当前传播逻辑不是单纯线性插值，而是：
+
+- 单关键帧时：
+  - 尽量沿同一条 AI track 跟随传播
+  - 传播关键帧相对 AI 框的修正量
+- 双关键帧时：
+  - 优先插值修正量
+  - 必要时在起止两条 AI track 之间切换
+- 对 `absent / occluded / outside`
+  - 做状态复制，不做 bbox 插值
+
+---
+
+## 10. 当前 admin 面板能力
+
+当前 admin 页面已能看：
+
+- total frames
+- annotated frames
+- total annotations
+- annotator counts
+- red / yellow / green span counts
+- `auto_pass_span_count`
+- `qa_sample_span_count`
+- annotator overview
+- recent annotations
+- frame detail query
+
+所以 admin 现在不只是“谁标了多少帧”，也是：
+
+- 风险分层监控入口
+
+---
+
+## 11. 当前系统的主要限制
+
+当前已知限制包括：
+
+1. `submit_issue` 单帧提交会过早 resolve 整个 issue
+2. issue 分配还没有真正排他锁
+3. `issue_id` 仍是排序编号，不是稳定主键
+4. green 不等于 correctness，只等于“未命中当前启发式规则”
+5. propagation 仍然依赖 AI 轨迹质量
+6. `split / merge / reappear` 目前是 issue 内、槽位级首版
+
+---
+
+## 12. 当前推荐命令
+
+### 启动 review
 
 ```bash
-.venv/bin/python ./codex/ui_review_server.py --batch-dir ./annotation/batch_20260305_v03 --reset-storage --init-only
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260413_v01 \
+  --host 127.0.0.1 \
+  --port 10086
 ```
 
-### 10.2 启动标注服务
+### 启动 admin
 
 ```bash
-.venv/bin/python ./codex/ui_review_server.py --batch-dir ./annotation/batch_20260305_v03 --port 10086
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/ui_admin_server.py \
+  --batch-dir ./annotation/batch_20260413_v01 \
+  --host 127.0.0.1 \
+  --port 10087
 ```
 
-### 10.3 启动管理面板
+### 重算 review_prep
 
 ```bash
-.venv/bin/python ./codex/ui_admin_server.py --batch-dir ./annotation/batch_20260305_v03 --port 10087
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/process_review_issue_prep.py \
+  --batch-dir ./annotation/batch_20260413_v01
 ```
 
-### 10.4 性能缓存（推荐）
+---
 
-离线预热（先跑完缓存再开服务，避免标注时抢 CPU）：
+## 13. 相关文档
 
-```bash
-.venv/bin/python ./codex/ui_review_server.py \
-  --batch-dir ./annotation/batch_20260305_v03 \
-  --frame-cache-disk \
-  --frame-cache-prewarm-only
-```
-
-启动服务（启用缓存）：
-
-```bash
-.venv/bin/python ./codex/ui_review_server.py \
-  --batch-dir ./annotation/batch_20260305_v03 \
-  --port 10086 \
-  --frame-cache-disk \
-  --frame-cache-max 512
-```
+- [README.md](/home/hrli/data_annotation/docs/README.md)
+- [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)

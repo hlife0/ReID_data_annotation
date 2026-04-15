@@ -12,18 +12,18 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — implement range expansion and `submit_issue_range` endpoint.
-- Modify: `codex/test_ui_review_server.py` — add regression tests for range submission semantics.
-- Modify: `codex/ui_review_web/index.html` — add range submit button.
-- Modify: `codex/ui_review_web/app.js` — wire issue-range submit flow.
+- Modify: `codes/ui_review_server.py` — implement range expansion and `submit_issue_range` endpoint.
+- Modify: `codes/test_ui_review_server.py` — add regression tests for range submission semantics.
+- Modify: `codes/ui_review_web/index.html` — add range submit button.
+- Modify: `codes/ui_review_web/app.js` — wire issue-range submit flow.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — update progress.
 
 ### Task 1: Add backend tests for issue-range submission
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -39,7 +39,7 @@ Expect:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because range submission does not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -51,34 +51,34 @@ Implement range expansion only for the tested behaviors:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add minimal issue range submission"
 ```
 
 ### Task 2: Add issue-range submit control to the frontend
 
 **Files:**
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/app.js`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/app.js`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "submitIssueRangeBtn|submit_issue_range|submitIssueRange" codex/ui_review_web/index.html codex/ui_review_web/app.js
+rg -n "submitIssueRangeBtn|submit_issue_range|submitIssueRange" codes/ui_review_web/index.html codes/ui_review_web/app.js
 ```
 Expected: no matches before implementation.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --check codex/ui_review_web/app.js`
+Run: `node --check codes/ui_review_web/app.js`
 Expected: syntax passes while range-submit hooks are absent.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -92,15 +92,15 @@ Add one extra issue-mode button:
 
 Run:
 ```bash
-rg -n "submitIssueRangeBtn|submit_issue_range|submitIssueRange" codex/ui_review_web/index.html codex/ui_review_web/app.js
-node --check codex/ui_review_web/app.js
+rg -n "submitIssueRangeBtn|submit_issue_range|submitIssueRange" codes/ui_review_web/index.html codes/ui_review_web/app.js
+node --check codes/ui_review_web/app.js
 ```
 Expected: hooks exist and JS syntax is valid.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/index.html codex/ui_review_web/app.js
+git add codes/ui_review_web/index.html codes/ui_review_web/app.js
 git commit -m "Add issue range apply control"
 ```
 
@@ -133,6 +133,6 @@ Run backend tests, JS syntax checks, and a formal-batch `submit_issue_range` smo
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py codex/ui_review_web/index.html codex/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py codes/ui_review_web/index.html codes/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify minimal range apply workflow"
 ```

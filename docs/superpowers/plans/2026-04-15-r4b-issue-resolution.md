@@ -12,16 +12,16 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add issue review persistence and unresolved filtering.
-- Modify: `codex/test_ui_review_server.py` — add regression tests proving resolved issues stop reappearing.
+- Modify: `codes/ui_review_server.py` — add issue review persistence and unresolved filtering.
+- Modify: `codes/test_ui_review_server.py` — add regression tests proving resolved issues stop reappearing.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — note that issue-mode now has completion state.
 
 ### Task 1: Add failing tests for issue resolution state
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -32,7 +32,7 @@ Add tests that:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because issue resolution state is not persisted yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -44,13 +44,13 @@ Implement:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Persist issue resolution state"
 ```
 
@@ -79,6 +79,6 @@ Run backend tests and formal-batch issue handling smoke tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Filter resolved issues from issue workflow"
 ```

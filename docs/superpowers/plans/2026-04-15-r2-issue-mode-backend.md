@@ -12,16 +12,16 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add issue dataclass/loading, assignment helpers, and new HTTP handlers.
-- Modify: `codex/test_ui_review_server.py` — add backend regression tests for issue loading and issue payload shape.
+- Modify: `codes/ui_review_server.py` — add issue dataclass/loading, assignment helpers, and new HTTP handlers.
+- Modify: `codes/test_ui_review_server.py` — add backend regression tests for issue loading and issue payload shape.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — mark R2 progress once issue APIs exist.
 
 ### Task 1: Add failing tests for issue-pool loading and assignment
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -34,7 +34,7 @@ Add a second test that:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because issue-mode state/helpers do not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -43,20 +43,20 @@ Implement only the minimum backend behavior needed to load issue rows and return
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add issue-mode review backend APIs"
 ```
 
 ### Task 2: Verify issue APIs on the formal batch
 
 **Files:**
-- Modify: `codex/ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md`
 - Test: `annotation/batch_20260413_v01/review_prep/*`
 
@@ -85,7 +85,7 @@ Patch any remaining payload or lookup mismatches revealed by the formal batch.
 
 Run:
 ```bash
-.venv/bin/python codex/test_ui_review_server.py
+.venv/bin/python codes/test_ui_review_server.py
 curl -s http://127.0.0.1:10086/api/next_issue -X POST -H 'Content-Type: application/json' -d '{"annotator_id":"annotator_issue_smoke"}'
 ```
 Expected: tests pass and issue API returns a non-empty issue payload.
@@ -93,6 +93,6 @@ Expected: tests pass and issue API returns a non-empty issue payload.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify issue-mode APIs on formal batch"
 ```

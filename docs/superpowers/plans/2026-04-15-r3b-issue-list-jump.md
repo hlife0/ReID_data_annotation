@@ -12,19 +12,19 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add issue list endpoints and filtering helpers.
-- Modify: `codex/test_ui_review_server.py` — add regression tests for listing and retrieving issues.
-- Modify: `codex/ui_review_web/index.html` — add issue list container.
-- Modify: `codex/ui_review_web/app.js` — load and render issue lists, support jump-to-issue.
-- Modify: `codex/ui_review_web/styles.css` — style the compact issue list block.
+- Modify: `codes/ui_review_server.py` — add issue list endpoints and filtering helpers.
+- Modify: `codes/test_ui_review_server.py` — add regression tests for listing and retrieving issues.
+- Modify: `codes/ui_review_web/index.html` — add issue list container.
+- Modify: `codes/ui_review_web/app.js` — load and render issue lists, support jump-to-issue.
+- Modify: `codes/ui_review_web/styles.css` — style the compact issue list block.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — advance progress state.
 
 ### Task 1: Add backend tests and APIs for issue listing
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -36,7 +36,7 @@ Add tests for:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because issue list helpers do not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -47,29 +47,29 @@ Add issue list helpers and HTTP endpoints:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add issue list review APIs"
 ```
 
 ### Task 2: Add compact issue list UI and jump behavior
 
 **Files:**
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/app.js`
-- Modify: `codex/ui_review_web/styles.css`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/styles.css`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "issueList|issueListBody|refreshIssuesBtn|loadIssues|loadIssueDetail|renderIssueList" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
+rg -n "issueList|issueListBody|refreshIssuesBtn|loadIssues|loadIssueDetail|renderIssueList" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
 ```
 Expected: no matches before implementation.
 
@@ -77,7 +77,7 @@ Expected: no matches before implementation.
 
 Run:
 ```bash
-node --check codex/ui_review_web/app.js
+node --check codes/ui_review_web/app.js
 ```
 Expected: syntax passes while issue list hooks are still missing.
 
@@ -94,15 +94,15 @@ Add a compact issue list block that:
 
 Run:
 ```bash
-rg -n "issueList|issueListBody|refreshIssuesBtn|loadIssues|loadIssueDetail|renderIssueList" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
-node --check codex/ui_review_web/app.js
+rg -n "issueList|issueListBody|refreshIssuesBtn|loadIssues|loadIssueDetail|renderIssueList" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
+node --check codes/ui_review_web/app.js
 ```
 Expected: hooks exist and JS syntax is valid.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
+git add codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
 git commit -m "Add issue list and jump UI"
 ```
 
@@ -140,6 +140,6 @@ Run backend tests, JS syntax checks, and list/detail curls against the formal ba
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify issue list and jump flow"
 ```

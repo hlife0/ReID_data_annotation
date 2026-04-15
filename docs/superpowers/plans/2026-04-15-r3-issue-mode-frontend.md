@@ -12,27 +12,27 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add issue-aware submit endpoint built on the existing annotation insertion path.
-- Modify: `codex/test_ui_review_server.py` — verify submit-next-issue behavior.
-- Modify: `codex/ui_review_web/index.html` — add issue-mode controls and issue summary strip.
-- Modify: `codex/ui_review_web/app.js` — add issue-mode state, request/submit flow, and summary rendering.
-- Modify: `codex/ui_review_web/styles.css` — style the issue summary strip without shrinking the main canvas.
+- Modify: `codes/ui_review_server.py` — add issue-aware submit endpoint built on the existing annotation insertion path.
+- Modify: `codes/test_ui_review_server.py` — verify submit-next-issue behavior.
+- Modify: `codes/ui_review_web/index.html` — add issue-mode controls and issue summary strip.
+- Modify: `codes/ui_review_web/app.js` — add issue-mode state, request/submit flow, and summary rendering.
+- Modify: `codes/ui_review_web/styles.css` — style the issue summary strip without shrinking the main canvas.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — mark R3 progress.
 
 ### Task 1: Add issue-aware submit behavior in the backend
 
 **Files:**
-- Modify: `codex/ui_review_server.py`
-- Modify: `codex/test_ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Extend `codex/test_ui_review_server.py` with a test that submits one annotation in issue mode and expects an `next_issue` payload instead of `next_frame`.
+Extend `codes/test_ui_review_server.py` with a test that submits one annotation in issue mode and expects an `next_issue` payload instead of `next_frame`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because issue-aware submit does not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -41,29 +41,29 @@ Add a shared submit helper and a new issue-aware endpoint/method so issue mode c
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add issue-aware review submit flow"
 ```
 
 ### Task 2: Connect the review frontend to issue mode
 
 **Files:**
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/app.js`
-- Modify: `codex/ui_review_web/styles.css`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/styles.css`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "nextIssueBtn|issueSummary|issueBadge|issueReasonList" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
+rg -n "nextIssueBtn|issueSummary|issueBadge|issueReasonList" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
 ```
 Expected: no matches before implementation.
 
@@ -71,7 +71,7 @@ Expected: no matches before implementation.
 
 Run:
 ```bash
-node --check codex/ui_review_web/app.js
+node --check codes/ui_review_web/app.js
 ```
 Expected: JS syntax passes before implementation while issue-mode UI hooks are still absent.
 
@@ -88,15 +88,15 @@ Add:
 
 Run:
 ```bash
-rg -n "nextIssueBtn|issueSummary|issueBadge|issueReasonList" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
-node --check codex/ui_review_web/app.js
+rg -n "nextIssueBtn|issueSummary|issueBadge|issueReasonList" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
+node --check codes/ui_review_web/app.js
 ```
 Expected: issue-mode hooks exist and JS syntax is valid.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css
+git add codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css
 git commit -m "Connect review UI to issue mode"
 ```
 
@@ -133,6 +133,6 @@ Run backend tests, JS syntax checks, and issue-mode curl smoke tests against the
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_web/styles.css docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_web/styles.css docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify issue mode end-to-end on review UI"
 ```

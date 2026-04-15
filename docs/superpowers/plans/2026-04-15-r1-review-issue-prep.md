@@ -12,16 +12,16 @@
 
 ## File Map
 
-- Create: `codex/process_review_issue_prep.py` — offline batch processor and reusable analysis helpers for track summaries, frame risk scoring, merged spans, and CSV/JSON export.
-- Create: `codex/test_process_review_issue_prep.py` — regression tests covering summary generation, risk span merging, and batch output layout.
+- Create: `codes/process_review_issue_prep.py` — offline batch processor and reusable analysis helpers for track summaries, frame risk scoring, merged spans, and CSV/JSON export.
+- Create: `codes/test_process_review_issue_prep.py` — regression tests covering summary generation, risk span merging, and batch output layout.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — mark R1 as started/completed once outputs exist.
 
 ### Task 1: Add failing regression tests for track and risk preparation
 
 **Files:**
-- Create: `codex/test_process_review_issue_prep.py`
-- Create: `codex/process_review_issue_prep.py`
-- Test: `codex/test_process_review_issue_prep.py`
+- Create: `codes/test_process_review_issue_prep.py`
+- Create: `codes/process_review_issue_prep.py`
+- Test: `codes/test_process_review_issue_prep.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -98,7 +98,7 @@ class ReviewIssuePrepTests(unittest.TestCase):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_process_review_issue_prep.py`
+Run: `.venv/bin/python codes/test_process_review_issue_prep.py`
 Expected: FAIL because `process_review_issue_prep.py` does not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -112,20 +112,20 @@ Implement the smallest analysis library needed to:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_process_review_issue_prep.py`
+Run: `.venv/bin/python codes/test_process_review_issue_prep.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/process_review_issue_prep.py codex/test_process_review_issue_prep.py
+git add codes/process_review_issue_prep.py codes/test_process_review_issue_prep.py
 git commit -m "Add review issue preparation pipeline"
 ```
 
 ### Task 2: Run R1 on the formal batch and verify exported outputs
 
 **Files:**
-- Modify: `codex/process_review_issue_prep.py`
+- Modify: `codes/process_review_issue_prep.py`
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md`
 - Test: `annotation/batch_20260413_v01/review_prep/*`
 
@@ -141,7 +141,7 @@ Expected: directory missing or empty before running the new processor.
 
 Run:
 ```bash
-.venv/bin/python codex/process_review_issue_prep.py --batch-dir ./annotation/batch_20260413_v01
+.venv/bin/python codes/process_review_issue_prep.py --batch-dir ./annotation/batch_20260413_v01
 ```
 Expected: first successful generation pass, then verify outputs.
 
@@ -153,8 +153,8 @@ If batch execution reveals missing manifest assumptions or real-data issues, pat
 
 Run:
 ```bash
-.venv/bin/python codex/test_process_review_issue_prep.py
-.venv/bin/python codex/process_review_issue_prep.py --batch-dir ./annotation/batch_20260413_v01
+.venv/bin/python codes/test_process_review_issue_prep.py
+.venv/bin/python codes/process_review_issue_prep.py --batch-dir ./annotation/batch_20260413_v01
 find annotation/batch_20260413_v01/review_prep -maxdepth 1 -type f | sort | sed -n '1,80p'
 .venv/bin/python - <<'PY'
 import csv, json
@@ -181,6 +181,6 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/process_review_issue_prep.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md annotation/batch_20260413_v01/review_prep
+git add codes/process_review_issue_prep.py docs/REQUIREMENTS_TRAJECTORY_REVIEW.md annotation/batch_20260413_v01/review_prep
 git commit -m "Generate review issue prep outputs for formal batch"
 ```

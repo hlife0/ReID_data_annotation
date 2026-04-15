@@ -15,7 +15,7 @@
 
 ## 2. 当前实现入口
 
-主脚本：`./codex/process_final_annotation_batch.py`
+主脚本：`./codes/process_final_annotation_batch.py`
 
 ---
 

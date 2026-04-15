@@ -12,18 +12,18 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add partial issue range submission helper.
-- Modify: `codex/test_ui_review_server.py` — verify partial forward range submission semantics.
-- Modify: `codex/ui_review_web/index.html` — add forward apply button.
-- Modify: `codex/ui_review_web/app.js` — wire forward apply flow in issue mode.
+- Modify: `codes/ui_review_server.py` — add partial issue range submission helper.
+- Modify: `codes/test_ui_review_server.py` — verify partial forward range submission semantics.
+- Modify: `codes/ui_review_web/index.html` — add forward apply button.
+- Modify: `codes/ui_review_web/app.js` — wire forward apply flow in issue mode.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — update progress.
 
 ### Task 1: Add backend tests for partial forward range submission
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -31,7 +31,7 @@ Add a test where issue `sample_issue_001` spans frames 1-2, but the partial subm
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because partial issue range submission does not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -40,34 +40,34 @@ Implement one backend path for `submit_issue_partial_range(issue_id, start_frame
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add partial issue range submission"
 ```
 
 ### Task 2: Add a forward-apply control in the issue UI
 
 **Files:**
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/app.js`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/app.js`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "submitIssueForwardBtn|submit_issue_partial_range|submitIssueForwardRange" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_server.py
+rg -n "submitIssueForwardBtn|submit_issue_partial_range|submitIssueForwardRange" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_server.py
 ```
 Expected: no matches before implementation.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --check codex/ui_review_web/app.js`
+Run: `node --check codes/ui_review_web/app.js`
 Expected: syntax passes while forward-apply hooks are absent.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -81,15 +81,15 @@ Add one extra button for issue mode:
 
 Run:
 ```bash
-rg -n "submitIssueForwardBtn|submit_issue_partial_range|submitIssueForwardRange" codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_server.py
-node --check codex/ui_review_web/app.js
+rg -n "submitIssueForwardBtn|submit_issue_partial_range|submitIssueForwardRange" codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_server.py
+node --check codes/ui_review_web/app.js
 ```
 Expected: hooks exist and syntax is valid.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/index.html codex/ui_review_web/app.js codex/ui_review_server.py
+git add codes/ui_review_web/index.html codes/ui_review_web/app.js codes/ui_review_server.py
 git commit -m "Add forward apply control for issue mode"
 ```
 
@@ -118,6 +118,6 @@ Run backend tests, JS syntax checks, and a formal-batch partial-range smoke test
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py codex/ui_review_web/index.html codex/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py codes/ui_review_web/index.html codes/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify forward apply workflow on formal batch"
 ```

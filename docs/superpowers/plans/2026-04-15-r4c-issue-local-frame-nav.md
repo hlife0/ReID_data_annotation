@@ -12,18 +12,18 @@
 
 ## File Map
 
-- Modify: `codex/ui_review_server.py` — add issue-local frame payload API.
-- Modify: `codex/test_ui_review_server.py` — verify navigating to another frame in the same issue.
-- Modify: `codex/ui_review_web/index.html` — add issue-local prev/next controls.
-- Modify: `codex/ui_review_web/app.js` — wire issue-local navigation and keep current issue state.
+- Modify: `codes/ui_review_server.py` — add issue-local frame payload API.
+- Modify: `codes/test_ui_review_server.py` — verify navigating to another frame in the same issue.
+- Modify: `codes/ui_review_web/index.html` — add issue-local prev/next controls.
+- Modify: `codes/ui_review_web/app.js` — wire issue-local navigation and keep current issue state.
 - Modify: `docs/REQUIREMENTS_TRAJECTORY_REVIEW.md` — update progress.
 
 ### Task 1: Add backend tests and API for issue-local frame payloads
 
 **Files:**
-- Modify: `codex/test_ui_review_server.py`
-- Modify: `codex/ui_review_server.py`
-- Test: `codex/test_ui_review_server.py`
+- Modify: `codes/test_ui_review_server.py`
+- Modify: `codes/ui_review_server.py`
+- Test: `codes/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -34,7 +34,7 @@ Add a test that calls `issue_frame(issue_id='sample_issue_001', frame_index=2)` 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: FAIL because issue-local frame lookup does not exist yet.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -44,34 +44,34 @@ Add helper + endpoint:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codex/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py
+git add codes/ui_review_server.py codes/test_ui_review_server.py
 git commit -m "Add issue-local frame review API"
 ```
 
 ### Task 2: Add issue-local prev/next controls in the UI
 
 **Files:**
-- Modify: `codex/ui_review_web/index.html`
-- Modify: `codex/ui_review_web/app.js`
-- Test: `codex/ui_review_web/app.js`
+- Modify: `codes/ui_review_web/index.html`
+- Modify: `codes/ui_review_web/app.js`
+- Test: `codes/ui_review_web/app.js`
 
 - [ ] **Step 1: Write the failing test**
 
 Run:
 ```bash
-rg -n "issuePrevFrameBtn|issueNextFrameBtn|loadIssueFrame|stepIssueFrame" codex/ui_review_web/index.html codex/ui_review_web/app.js
+rg -n "issuePrevFrameBtn|issueNextFrameBtn|loadIssueFrame|stepIssueFrame" codes/ui_review_web/index.html codes/ui_review_web/app.js
 ```
 Expected: no matches before implementation.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --check codex/ui_review_web/app.js`
+Run: `node --check codes/ui_review_web/app.js`
 Expected: syntax passes before the hooks exist.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -85,15 +85,15 @@ Add prev/next issue-frame controls that:
 
 Run:
 ```bash
-rg -n "issuePrevFrameBtn|issueNextFrameBtn|loadIssueFrame|stepIssueFrame" codex/ui_review_web/index.html codex/ui_review_web/app.js
-node --check codex/ui_review_web/app.js
+rg -n "issuePrevFrameBtn|issueNextFrameBtn|loadIssueFrame|stepIssueFrame" codes/ui_review_web/index.html codes/ui_review_web/app.js
+node --check codes/ui_review_web/app.js
 ```
 Expected: hooks exist and syntax is valid.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_web/index.html codex/ui_review_web/app.js
+git add codes/ui_review_web/index.html codes/ui_review_web/app.js
 git commit -m "Add issue-local frame navigation"
 ```
 
@@ -126,6 +126,6 @@ Run backend tests, JS syntax checks, and formal-batch issue-frame curls.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex/ui_review_server.py codex/test_ui_review_server.py codex/ui_review_web/index.html codex/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
+git add codes/ui_review_server.py codes/test_ui_review_server.py codes/ui_review_web/index.html codes/ui_review_web/app.js docs/REQUIREMENTS_TRAJECTORY_REVIEW.md
 git commit -m "Verify issue-local frame navigation"
 ```
