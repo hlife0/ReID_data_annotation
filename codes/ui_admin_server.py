@@ -175,14 +175,14 @@ class AdminState:
             ).fetchall()
         finally:
             conn.close()
-        risk_summary = self._load_segment_prep_summary()
+        segment_summary = self._load_segment_prep_summary()
 
         return {
             "total_frames": int(row["total_frames"] or 0),
             "annotated_frames": int(row["annotated_frames"] or 0),
             "total_annotations": int(total_annotations or 0),
             "unique_annotators": int(unique_annotators or 0),
-            "risk_summary": risk_summary,
+            "segment_summary": segment_summary,
             "frame_count_bins": [
                 {"label": "1", "count": int(row["bin_1"] or 0)},
                 {"label": "2", "count": int(row["bin_2"] or 0)},

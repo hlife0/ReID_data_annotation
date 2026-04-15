@@ -517,7 +517,7 @@ function renderSegmentSummary() {
   const segment = state.currentSegment;
   refs.segmentSummary.hidden = false;
   refs.segmentBadge.textContent = segmentTypeLabel(segment.segment_type);
-  refs.segmentBadge.className = `issue-badge ${segment.segment_type === "stable_segment" ? "green" : "red"}`;
+  refs.segmentBadge.className = `segment-badge ${segment.segment_type === "stable_segment" ? "green" : "red"}`;
   refs.segmentIdText.textContent = segment.segment_id;
   refs.segmentRangeText.textContent = t("segment_range", {
     start: segment.start_frame,

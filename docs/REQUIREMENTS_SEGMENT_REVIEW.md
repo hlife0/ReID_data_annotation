@@ -8,8 +8,8 @@
 
 本文档定义一条新的 review 主线：
 
-- 不再以 `issue` 为主语义
-- 不再以“风险帧 / 风险区间”作为人工工作单位
+- 不再以旧问题池机制为主语义
+- 不再以风险区间作为人工工作单位
 - 改为先离线分段，再按段分发给标注者
 
 这条主线的唯一目标是：
@@ -27,7 +27,7 @@
 
 本方案必须满足以下约束：
 
-1. 主语义必须是“段”，不是 `issue`
+1. 主语义必须是“段”
 2. 离线阶段必须先把每个 `session` 切成很多标注段
 3. 每个标注段只能是两种类型之一：
    - `stable_segment`
@@ -239,8 +239,6 @@ representative_frame = floor((start_frame + end_frame) / 2)
 
 在线 review 服务必须以 `segment` 为唯一主语义。
 
-不得再以 `issue` 作为主分发单位。
-
 ### 7.2 主接口
 
 服务端主接口应改为：
@@ -345,8 +343,7 @@ representative_frame = floor((start_frame + end_frame) / 2)
 
 不要求向标注者暴露：
 
-- issue list
-- issue timeline
+- 段切分细节
 - 风险分层细节
 - 复杂传播控制
 

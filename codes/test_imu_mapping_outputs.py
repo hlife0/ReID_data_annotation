@@ -159,7 +159,7 @@ def main() -> None:
         all_errors.extend(validate_summary(path))
 
     if all_errors:
-        print(f"Validation FAIL: {len(all_errors)} issue(s)")
+        print(f"Validation FAIL: {len(all_errors)} problem(s)")
         for err in all_errors:
             print(f"- {err}")
         raise SystemExit(1)

@@ -204,11 +204,10 @@ node --check codes/ui_admin_web/app.js
 
 当前系统已经可用，但还不是终态。最值得知道的限制有：
 
-1. 段模式已建立，但主服务仍处于迁移期
-2. 旧 `issue-mode` 代码仍在仓库中，作为历史兼容残留
-3. 稳定段定义当前只吸收了 `low_score + overlap + track-set constancy`
-4. `bbox_jump` 等旧风险信号还没有进入新的数学定义主线
-5. 文档主线已切到段模式，但部分历史文档仍保留旧阶段上下文
+1. 段模式已建立，但主服务仍处于持续收口期
+2. 稳定段定义当前只吸收了 `low_score + overlap + track-set constancy`
+3. `bbox_jump` 等旧风险信号还没有进入新的数学定义主线
+4. 文档主线已切到段模式，但 archive 中仍保留旧阶段上下文
 
 ---
 

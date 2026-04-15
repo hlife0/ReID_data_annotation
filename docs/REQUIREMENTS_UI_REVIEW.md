@@ -209,10 +209,9 @@
 
 当前已知限制包括：
 
-1. 段模式实现仍处于迁移期
-2. 旧 issue-mode 代码仍在仓库中，尚未完全删除
-3. 稳定段当前仍只使用 `low_score + overlap + track-set constancy`
-4. 稳定段代表帧上的手工框到 AI track 的自动匹配目前只做唯一匹配
+1. 段模式实现仍处于持续收口期
+2. 稳定段当前仍只使用 `low_score + overlap + track-set constancy`
+3. 稳定段代表帧上的手工框到 AI track 的自动匹配目前只做唯一匹配
 
 ---
 
