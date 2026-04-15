@@ -46,9 +46,9 @@
             </div>
             <div id="progressText" class="progress-text">0/4000</div>
           </div>
-          <button id="nextIssueBtn" class="btn subtle" data-i18n="next_issue">下一问题点</button>
+          <button id="nextSegmentBtn" class="btn subtle" data-i18n="next_segment">下一段</button>
           <button id="nextFrameBtn" class="btn subtle" data-i18n="skip_frame">跳过当前帧</button>
-          <button id="submitBtn" class="btn" data-i18n="submit_next">提交并下一帧</button>
+          <button id="submitBtn" class="btn" data-i18n="submit_next_segment">提交并下一段</button>
           <button id="langToggleBtn" class="btn subtle">EN</button>
         </div>
       </header>
@@ -60,21 +60,15 @@
         <div><span id="labelCount" class="label" data-i18n="annotation_count">标注次数</span> <span id="annoCount">-</span></div>
       </section>
 
-      <section id="issueSummary" class="issue-summary" hidden>
+      <section id="segmentSummary" class="issue-summary" hidden>
         <div class="issue-summary-head">
-          <span id="issueBadge" class="issue-badge">ISSUE</span>
-          <span id="issueIdText" class="issue-id-text">-</span>
+          <span id="segmentBadge" class="issue-badge">SEGMENT</span>
+          <span id="segmentIdText" class="issue-id-text">-</span>
         </div>
         <div class="issue-summary-meta">
-          <span id="issueRangeText">-</span>
-          <span id="issueTrackText">-</span>
-          <div class="row-actions">
-            <button id="issuePrevFrameBtn" class="btn subtle">上一帧</button>
-            <button id="issueNextFrameBtn" class="btn subtle">下一帧</button>
-          </div>
+          <span id="segmentRangeText">-</span>
+          <span id="segmentTrackText">-</span>
         </div>
-        <div id="issueReasonList" class="issue-reason-list"></div>
-        <div id="issueTimeline" class="issue-timeline"></div>
       </section>
 
       <main class="main-grid">
@@ -92,31 +86,6 @@
         </section>
 
         <section class="control-panel">
-          <div id="issueList" class="issue-list-panel">
-            <div class="issue-list-head">
-              <span data-i18n="issue_list_title">问题列表</span>
-              <button id="refreshIssuesBtn" class="btn subtle" data-i18n="history_refresh">刷新</button>
-            </div>
-            <div id="issueListBody" class="issue-list-body"></div>
-          </div>
-
-          <div class="trajectory-panel">
-            <div class="trajectory-panel-head">
-              <span data-i18n="trajectory_title">轨迹工作台</span>
-            </div>
-            <div id="trajectoryCards" class="trajectory-cards"></div>
-            <div class="keyframe-panel">
-              <div class="trajectory-panel-head">
-                <span data-i18n="keyframe_title">关键帧</span>
-                <div class="row-actions">
-                  <button id="removeCurrentKeyframeBtn" class="btn subtle" data-i18n="remove_keyframe">移除当前关键帧</button>
-                  <button id="clearKeyframesBtn" class="btn subtle" data-i18n="clear_keyframes">清空关键帧</button>
-                </div>
-              </div>
-              <div id="keyframeList" class="keyframe-list"></div>
-            </div>
-          </div>
-
           <div class="slot-stack">
             <div class="slot-stack-head">
               <span id="slotStackTitle" class="label" data-i18n="slots_title">标注槽位</span>
@@ -141,13 +110,6 @@
                 <button id="activeAbsentBtn" class="btn subtle danger" data-i18n="mark_absent">不存在</button>
                 <button id="activeOccludedBtn" class="btn subtle" data-i18n="mark_occluded">遮挡</button>
                 <button id="activeOutsideBtn" class="btn subtle" data-i18n="mark_outside">出画</button>
-                <button id="splitTrackBtn" class="btn subtle" data-i18n="split_track">切断轨迹</button>
-                <button id="reappearSlotBtn" class="btn subtle" data-i18n="mark_reappear">重新出现</button>
-                <button id="setKeyframeAnchorBtn" class="btn subtle" data-i18n="save_keyframe">记录关键帧</button>
-                <button id="submitInterpolationBtn" class="btn subtle" data-i18n="submit_propagation">智能传播整段</button>
-                <button id="submitIssueBackwardBtn" class="btn subtle">从当前帧向前应用</button>
-                <button id="submitIssueForwardBtn" class="btn subtle">从当前帧向后应用</button>
-                <button id="submitIssueRangeBtn" class="btn subtle" data-i18n="submit_issue_range">整段应用</button>
               </div>
             </div>
             <div class="grid4 compact-grid">

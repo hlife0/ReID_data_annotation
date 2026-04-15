@@ -1,16 +1,21 @@
 const I18N = {
   zh: {
-    page_title: "多人框标注复核",
-    page_subtitle: "P1-P7 多人标注流程。",
+    page_title: "多人框段标注",
+    page_subtitle: "稳定段与非简单单帧标注流程。",
     annotator_id: "标注员ID",
-    next_issue: "下一问题点",
-    skip_frame: "跳过当前帧",
+    next_segment: "下一段",
+    skip_frame: "跳过当前段",
     submit_next: "提交并下一帧",
-    submit_next_issue: "提交并下一问题点",
+    submit_next_segment: "提交并下一段",
     video: "视频",
     frame: "帧号",
     timestamp_ms: "时间戳(ms)",
     annotation_count: "标注次数",
+    segment_type: "段类型",
+    segment_range: "段范围 #{start} - #{end}",
+    segment_tracks: "轨迹 {tracks}",
+    segment_stable: "稳定段",
+    segment_non_simple_single_frame: "非简单单帧",
     chip_ai: "AI框（虚线 + track_id）",
     chip_user: "用户框（P1-P7）",
     source: "来源",
@@ -18,19 +23,8 @@ const I18N = {
     manual_draw: "手动画框",
     draw_new_box: "绘制新框",
     mark_absent: "不存在",
-    save_keyframe: "记录关键帧",
-    remove_keyframe: "移除当前关键帧",
-    clear_keyframes: "清空关键帧",
-    submit_propagation: "智能传播整段",
-    submit_issue_backward: "从当前帧向前应用",
-    submit_issue_forward: "从当前帧向后应用",
-    submit_issue_range: "整段应用",
     mark_occluded: "遮挡",
     mark_outside: "出画",
-    split_track: "切断轨迹",
-    mark_reappear: "重新出现",
-    trajectory_title: "轨迹工作台",
-    keyframe_title: "关键帧",
     src_not_set: "未设置",
     src_ai: "AI",
     src_manual_draw: "手动画框",
@@ -50,32 +44,13 @@ const I18N = {
     hint_click_drag_draw: "请在画布上按住拖拽绘制 {slot}",
     hint_marked_absent: "{slot} 已标记为不存在",
     toast_frame_load_failed: "帧图加载失败",
-    toast_loaded_issue: "已加载下一问题点",
+    toast_loaded_segment: "已加载下一段",
     toast_loaded_next: "已加载下一帧",
     toast_no_frame: "当前没有可操作帧",
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted: "已提交 {video}#{frame}，该帧累计 {count} 次",
     toast_recommend_applied: "已应用历史推荐",
-    toast_keyframe_saved: "已记录关键帧 #{frame}",
-    toast_keyframe_removed: "已移除关键帧 #{frame}",
-    toast_keyframes_cleared: "已清空当前问题的关键帧",
-    toast_propagated: "已智能传播 {count} 帧",
-    toast_split_track: "{slot} 已从当前 AI 轨迹切断",
-    toast_reappear_marked: "{slot} 已记录为重新出现关键帧",
-    toast_track_merged: "{slot} 已并入 AI track {track}",
-    issue_none: "当前未加载问题点",
-    issue_list_title: "问题列表",
-    issue_range: "范围 #{start} - #{end}",
-    issue_tracks: "轨迹 {tracks}",
-    imu_conflict_hint: "IMU 提示：本段有 {count} 个活跃设备，仅在人数/身份冲突时参考",
-    keyframe_empty: "当前问题还没有关键帧",
-    trajectory_empty: "当前问题没有轨迹卡片",
-    keyframe_label: "关键帧 #{frame}",
-    keyframe_sources: "{count} 个槽位已记录",
-    track_range: "可见范围 #{start} - #{end}",
-    track_stats: "min_score {min} | jump {jump}",
-    track_jump: "跳到轨迹",
-    track_merge: "并到当前槽",
+    segment_none: "当前未加载标注段",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -101,17 +76,22 @@ const I18N = {
     lang_toggle: "EN",
   },
   en: {
-    page_title: "Multi-Person UI Review",
-    page_subtitle: "Multi-person review workflow for P1-P7.",
+    page_title: "Multi-Person Segment Labeling",
+    page_subtitle: "Stable-segment and non-simple-frame labeling workflow.",
     annotator_id: "Annotator ID",
-    next_issue: "Next Issue",
-    skip_frame: "Skip This Frame",
+    next_segment: "Next Segment",
+    skip_frame: "Skip This Segment",
     submit_next: "Submit & Next Frame",
-    submit_next_issue: "Submit & Next Issue",
+    submit_next_segment: "Submit & Next Segment",
     video: "Video",
     frame: "Frame",
     timestamp_ms: "Timestamp (ms)",
     annotation_count: "Annotation Count",
+    segment_type: "Segment Type",
+    segment_range: "Range #{start} - #{end}",
+    segment_tracks: "Tracks {tracks}",
+    segment_stable: "Stable Segment",
+    segment_non_simple_single_frame: "Non-Simple Single Frame",
     chip_ai: "AI box (dashed + track_id)",
     chip_user: "User boxes (P1-P7)",
     source: "Source",
@@ -119,19 +99,8 @@ const I18N = {
     manual_draw: "Manual draw",
     draw_new_box: "Draw New Box",
     mark_absent: "Mark Missing",
-    save_keyframe: "Save Keyframe",
-    remove_keyframe: "Remove Keyframe",
-    clear_keyframes: "Clear Keyframes",
-    submit_propagation: "Propagate Issue",
-    submit_issue_backward: "Apply Backward",
-    submit_issue_forward: "Apply Forward",
-    submit_issue_range: "Apply To Issue",
     mark_occluded: "Occluded",
     mark_outside: "Outside",
-    split_track: "Split Track",
-    mark_reappear: "Reappear",
-    trajectory_title: "Trajectory Workbench",
-    keyframe_title: "Keyframes",
     src_not_set: "not_set",
     src_ai: "ai",
     src_manual_draw: "manual_draw",
@@ -151,32 +120,13 @@ const I18N = {
     hint_click_drag_draw: "Click and drag on canvas to draw {slot}",
     hint_marked_absent: "{slot} marked as missing",
     toast_frame_load_failed: "Failed to load frame image",
-    toast_loaded_issue: "Loaded next issue",
+    toast_loaded_segment: "Loaded next segment",
     toast_loaded_next: "Loaded next frame",
     toast_no_frame: "No frame loaded",
     toast_ai_not_found: "AI track not found",
     toast_submitted: "Submitted {video}#{frame} -> count {count}",
     toast_recommend_applied: "Applied historical recommendations",
-    toast_keyframe_saved: "Saved keyframe #{frame}",
-    toast_keyframe_removed: "Removed keyframe #{frame}",
-    toast_keyframes_cleared: "Cleared keyframes for this issue",
-    toast_propagated: "Propagated {count} frames",
-    toast_split_track: "{slot} detached from current AI track",
-    toast_reappear_marked: "{slot} marked as reappear keyframe",
-    toast_track_merged: "{slot} merged with AI track {track}",
-    issue_none: "No issue loaded",
-    issue_list_title: "Issue List",
-    issue_range: "Range #{start} - #{end}",
-    issue_tracks: "Tracks {tracks}",
-    imu_conflict_hint: "IMU hint: {count} active devices in this segment, use only for identity/count conflicts",
-    keyframe_empty: "No keyframes yet for this issue",
-    trajectory_empty: "No issue tracks available",
-    keyframe_label: "Keyframe #{frame}",
-    keyframe_sources: "{count} slots saved",
-    track_range: "Visible #{start} - #{end}",
-    track_stats: "min_score {min} | jump {jump}",
-    track_jump: "Jump",
-    track_merge: "Merge",
+    segment_none: "No segment loaded",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -238,20 +188,15 @@ const state = {
   editing: false,
   editingAnnotationId: "",
   lastAssignmentFrame: null,
-  lastAssignmentIssue: null,
-  currentIssue: null,
-  issues: [],
-  issueListVideoStem: "",
-  issueKeyframes: [],
-  keyframeAnchor: null,
-  dispatchMode: "frame",
+  currentSegment: null,
+  dispatchMode: "segment",
   progressTarget: 4000,
 };
 
 const refs = {
   langToggleBtn: document.getElementById("langToggleBtn"),
   annotatorId: document.getElementById("annotatorId"),
-  nextIssueBtn: document.getElementById("nextIssueBtn"),
+  nextSegmentBtn: document.getElementById("nextSegmentBtn"),
   nextFrameBtn: document.getElementById("nextFrameBtn"),
   submitBtn: document.getElementById("submitBtn"),
   videoStem: document.getElementById("videoStem"),
@@ -269,17 +214,6 @@ const refs = {
   activeAbsentBtn: document.getElementById("activeAbsentBtn"),
   activeOccludedBtn: document.getElementById("activeOccludedBtn"),
   activeOutsideBtn: document.getElementById("activeOutsideBtn"),
-  splitTrackBtn: document.getElementById("splitTrackBtn"),
-  reappearSlotBtn: document.getElementById("reappearSlotBtn"),
-  setKeyframeAnchorBtn: document.getElementById("setKeyframeAnchorBtn"),
-  submitInterpolationBtn: document.getElementById("submitInterpolationBtn"),
-  submitIssueBackwardBtn: document.getElementById("submitIssueBackwardBtn"),
-  submitIssueForwardBtn: document.getElementById("submitIssueForwardBtn"),
-  submitIssueRangeBtn: document.getElementById("submitIssueRangeBtn"),
-  removeCurrentKeyframeBtn: document.getElementById("removeCurrentKeyframeBtn"),
-  clearKeyframesBtn: document.getElementById("clearKeyframesBtn"),
-  trajectoryCards: document.getElementById("trajectoryCards"),
-  keyframeList: document.getElementById("keyframeList"),
   activeX: document.getElementById("activeX"),
   activeY: document.getElementById("activeY"),
   activeW: document.getElementById("activeW"),
@@ -297,17 +231,11 @@ const refs = {
   historyToggleBtn: document.getElementById("historyToggleBtn"),
   progressFill: document.getElementById("progressFill"),
   progressText: document.getElementById("progressText"),
-  issueSummary: document.getElementById("issueSummary"),
-  issueBadge: document.getElementById("issueBadge"),
-  issueIdText: document.getElementById("issueIdText"),
-  issueRangeText: document.getElementById("issueRangeText"),
-  issueTrackText: document.getElementById("issueTrackText"),
-  issueReasonList: document.getElementById("issueReasonList"),
-  issueTimeline: document.getElementById("issueTimeline"),
-  issuePrevFrameBtn: document.getElementById("issuePrevFrameBtn"),
-  issueNextFrameBtn: document.getElementById("issueNextFrameBtn"),
-  issueListBody: document.getElementById("issueListBody"),
-  refreshIssuesBtn: document.getElementById("refreshIssuesBtn"),
+  segmentSummary: document.getElementById("segmentSummary"),
+  segmentBadge: document.getElementById("segmentBadge"),
+  segmentIdText: document.getElementById("segmentIdText"),
+  segmentRangeText: document.getElementById("segmentRangeText"),
+  segmentTrackText: document.getElementById("segmentTrackText"),
 };
 
 const ctx = refs.canvas.getContext("2d");
@@ -347,7 +275,7 @@ function applyLanguage() {
   renderSlotTabs();
   renderAiButtons();
   renderCurrentHint();
-  renderIssueSummary();
+  renderSegmentSummary();
   updateActionLabels();
   updateProgress();
 }
@@ -371,18 +299,18 @@ function shouldPromptAnnotatorModal(storedAnnotatorId) {
   return !storedAnnotatorId || storedAnnotatorId === DEFAULT_ANNOTATOR_ID;
 }
 
-function requestInitialFrameOnce() {
+function requestInitialSegmentOnce() {
   if (state.initialFrameRequested) {
     return;
   }
   state.initialFrameRequested = true;
-  requestNextFrame();
+  requestNextSegment();
 }
 
 function closeAnnotatorModalAndContinue() {
   refs.annotatorModal.hidden = true;
   refs.annotatorModalHint.textContent = "";
-  requestInitialFrameOnce();
+  requestInitialSegmentOnce();
 }
 
 function submitAnnotatorModal() {
@@ -436,33 +364,13 @@ function renderCurrentHint() {
 
 function updateActionLabels() {
   refs.submitBtn.textContent =
-    state.dispatchMode === "issue" ? t("submit_next_issue") : t("submit_next");
-  if (refs.submitIssueRangeBtn) {
-    refs.submitIssueRangeBtn.hidden = state.dispatchMode !== "issue";
+    state.dispatchMode === "segment" ? t("submit_next_segment") : t("submit_next");
+  const stable = state.currentSegment?.segment_type === "stable_segment";
+  if (refs.activeOccludedBtn) {
+    refs.activeOccludedBtn.hidden = stable;
   }
-  if (refs.submitIssueForwardBtn) {
-    refs.submitIssueForwardBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.submitIssueBackwardBtn) {
-    refs.submitIssueBackwardBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.setKeyframeAnchorBtn) {
-    refs.setKeyframeAnchorBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.submitInterpolationBtn) {
-    refs.submitInterpolationBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.splitTrackBtn) {
-    refs.splitTrackBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.reappearSlotBtn) {
-    refs.reappearSlotBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.removeCurrentKeyframeBtn) {
-    refs.removeCurrentKeyframeBtn.hidden = state.dispatchMode !== "issue";
-  }
-  if (refs.clearKeyframesBtn) {
-    refs.clearKeyframesBtn.hidden = state.dispatchMode !== "issue";
+  if (refs.activeOutsideBtn) {
+    refs.activeOutsideBtn.hidden = stable;
   }
 }
 
@@ -693,6 +601,35 @@ function syncHeader() {
   refs.frameIndex.textContent = state.frame.frame_index;
   refs.timestampMs.textContent = state.frame.timestamp_ms;
   refs.annoCount.textContent = state.frame.annotation_count;
+}
+
+function segmentTypeLabel(segmentType) {
+  if (segmentType === "stable_segment") return t("segment_stable");
+  if (segmentType === "non_simple_single_frame") return t("segment_non_simple_single_frame");
+  return segmentType || t("segment_none");
+}
+
+function renderSegmentSummary() {
+  if (!refs.segmentSummary) return;
+  const segment = state.currentSegment;
+  if (!segment) {
+    refs.segmentSummary.hidden = true;
+    updateActionLabels();
+    return;
+  }
+  refs.segmentSummary.hidden = false;
+  refs.segmentBadge.textContent = segmentTypeLabel(segment.segment_type);
+  refs.segmentBadge.className = `issue-badge ${segment.segment_type === "stable_segment" ? "green" : "red"}`;
+  refs.segmentIdText.textContent = segment.segment_id || t("segment_none");
+  refs.segmentRangeText.textContent = t("segment_range", {
+    start: segment.start_frame,
+    end: segment.end_frame,
+  });
+  const tracks = Array.isArray(segment.track_ids) && segment.track_ids.length
+    ? segment.track_ids.join(", ")
+    : "-";
+  refs.segmentTrackText.textContent = t("segment_tracks", { tracks });
+  updateActionLabels();
 }
 
 function renderIssueSummary() {
@@ -1050,15 +987,18 @@ function applyFrame(frame, options = {}) {
     applyRecommendations(frame.recommendations);
   }
   syncHeader();
-  renderIssueSummary();
-  renderIssueList();
-  renderIssueTimeline();
-  renderTrajectoryCards();
+  renderSegmentSummary();
   updateProgress();
   loadFrameImage(frame);
   if (options.isAssignment) {
     state.lastAssignmentFrame = frame;
   }
+}
+
+function applySegmentPayload(payload, options = {}) {
+  state.dispatchMode = "segment";
+  state.currentSegment = payload.segment || null;
+  applyFrame(payload.frame, options);
 }
 
 function applyIssuePayload(payload, options = {}) {
@@ -1543,6 +1483,24 @@ async function requestNextFrame() {
   }
 }
 
+async function requestNextSegment() {
+  if (refs.nextSegmentBtn) {
+    refs.nextSegmentBtn.disabled = true;
+  }
+  try {
+    const payload = await postJson("/api/next_segment", { annotator_id: annotatorId() });
+    exitEditMode();
+    applySegmentPayload(payload, { isAssignment: true });
+    showToastKey("toast_loaded_segment");
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    if (refs.nextSegmentBtn) {
+      refs.nextSegmentBtn.disabled = false;
+    }
+  }
+}
+
 async function requestNextIssue() {
   if (refs.nextIssueBtn) {
     refs.nextIssueBtn.disabled = true;
@@ -1632,28 +1590,33 @@ async function submitAndNext() {
   refs.submitBtn.disabled = true;
   try {
     const payload = buildSubmitPayload();
-    const isIssueMode = state.dispatchMode === "issue" && state.currentIssue;
-    if (isIssueMode && state.currentIssue?.issue_id) {
-      payload.issue_id = state.currentIssue.issue_id;
+    const isSegmentMode = state.dispatchMode === "segment" && state.currentSegment;
+    if (isSegmentMode && state.currentSegment?.segment_id) {
+      payload.segment_id = state.currentSegment.segment_id;
     }
-    const result = await postJson(isIssueMode ? "/api/submit_issue" : "/api/submit", payload);
+    const result = await postJson(isSegmentMode ? "/api/submit_segment" : "/api/submit", payload);
     exitEditMode();
-    if (isIssueMode && result.next_issue) {
-      applyIssuePayload(result.next_issue, { isAssignment: true });
-      loadIssues({ silent: true });
+    if (isSegmentMode && result.next_segment) {
+      applySegmentPayload(result.next_segment, { isAssignment: true });
+    } else if (isSegmentMode) {
+      state.currentSegment = null;
+      renderSegmentSummary();
     } else {
-      state.dispatchMode = "frame";
-      state.currentIssue = null;
-      state.lastAssignmentIssue = null;
+      state.dispatchMode = "segment";
+      state.currentSegment = null;
       applyFrame(result.next_frame, { isAssignment: true });
       schedulePrefetch(result.prefetch_frames);
     }
     loadHistory();
-    showToastKey("toast_submitted", {
-      video: result.submitted.video_stem,
-      frame: result.submitted.frame_index,
-      count: result.submitted.count_after_submit,
-    });
+    if (isSegmentMode) {
+      showToast(`已提交段 ${result.submitted.segment_id}，写入 ${result.submitted_frame_count} 帧`);
+    } else {
+      showToastKey("toast_submitted", {
+        video: result.submitted.video_stem,
+        frame: result.submitted.frame_index,
+        count: result.submitted.count_after_submit,
+      });
+    }
   } catch (err) {
     showToast(err.message, true);
   } finally {
@@ -2040,10 +2003,10 @@ function initEvents() {
   });
 
   refs.langToggleBtn.addEventListener("click", toggleLanguage);
-  if (refs.nextIssueBtn) {
-    refs.nextIssueBtn.addEventListener("click", requestNextIssue);
+  if (refs.nextSegmentBtn) {
+    refs.nextSegmentBtn.addEventListener("click", requestNextSegment);
   }
-  refs.nextFrameBtn.addEventListener("click", requestNextFrame);
+  refs.nextFrameBtn.addEventListener("click", requestNextSegment);
   refs.submitBtn.addEventListener("click", submitAndNext);
 
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
@@ -2054,48 +2017,7 @@ function initEvents() {
   if (refs.activeOutsideBtn) {
     refs.activeOutsideBtn.addEventListener("click", () => markSlotState(state.activeSlot, "outside"));
   }
-  if (refs.splitTrackBtn) {
-    refs.splitTrackBtn.addEventListener("click", splitActiveTrack);
-  }
-  if (refs.reappearSlotBtn) {
-    refs.reappearSlotBtn.addEventListener("click", markReappearKeyframe);
-  }
-  if (refs.setKeyframeAnchorBtn) {
-    refs.setKeyframeAnchorBtn.textContent = t("save_keyframe");
-    refs.setKeyframeAnchorBtn.addEventListener("click", setKeyframeAnchor);
-  }
-  if (refs.submitInterpolationBtn) {
-    refs.submitInterpolationBtn.textContent = t("submit_propagation");
-    refs.submitInterpolationBtn.addEventListener("click", submitInterpolation);
-  }
-  if (refs.submitIssueBackwardBtn) {
-    refs.submitIssueBackwardBtn.textContent = t("submit_issue_backward");
-    refs.submitIssueBackwardBtn.addEventListener("click", submitIssueBackwardRange);
-  }
-  if (refs.submitIssueForwardBtn) {
-    refs.submitIssueForwardBtn.textContent = t("submit_issue_forward");
-    refs.submitIssueForwardBtn.addEventListener("click", submitIssueForwardRange);
-  }
-  if (refs.submitIssueRangeBtn) {
-    refs.submitIssueRangeBtn.addEventListener("click", submitIssueRange);
-  }
-  if (refs.removeCurrentKeyframeBtn) {
-    refs.removeCurrentKeyframeBtn.addEventListener("click", removeCurrentKeyframe);
-  }
-  if (refs.clearKeyframesBtn) {
-    refs.clearKeyframesBtn.addEventListener("click", clearIssueKeyframes);
-  }
-
   refs.refreshHistoryBtn.addEventListener("click", () => loadHistory());
-  if (refs.refreshIssuesBtn) {
-    refs.refreshIssuesBtn.addEventListener("click", () => loadIssues());
-  }
-  if (refs.issuePrevFrameBtn) {
-    refs.issuePrevFrameBtn.addEventListener("click", () => stepIssueFrame(-1));
-  }
-  if (refs.issueNextFrameBtn) {
-    refs.issueNextFrameBtn.addEventListener("click", () => stepIssueFrame(1));
-  }
   refs.saveEditBtn.addEventListener("click", saveEdit);
   refs.exitEditBtn.addEventListener("click", exitEditMode);
   if (refs.historyToggleBtn && refs.historyDock) {
@@ -2135,13 +2057,12 @@ function init() {
   applyLanguage();
   const prompted = maybePromptAnnotatorModal();
   if (!prompted) {
-    requestInitialFrameOnce();
+    requestInitialSegmentOnce();
   }
   refs.saveEditBtn.hidden = true;
   refs.exitEditBtn.hidden = true;
   initHistoryDock();
   loadHistory({ silent: true });
-  loadIssues({ silent: true });
 }
 
 window.addEventListener("DOMContentLoaded", init);

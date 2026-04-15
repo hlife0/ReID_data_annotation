@@ -134,6 +134,18 @@ class IssueRecord:
     imu_count: int
 
 
+@dataclass(frozen=True)
+class SegmentRecord:
+    segment_id: str
+    video_stem: str
+    segment_type: str
+    start_frame: int
+    end_frame: int
+    representative_frame: int
+    track_ids: List[int]
+    frame_count: int
+
+
 class RunLogger:
     def __init__(self, run_log_path: Path, error_log_path: Path) -> None:
         self.run_log_path = run_log_path
@@ -259,6 +271,9 @@ class AnnotationState:
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, float | int]]] = {}
         self.issue_pool: List[IssueRecord] = []
         self.issue_lookup: Dict[str, IssueRecord] = {}
+        self.segment_pool: List[SegmentRecord] = []
+        self.segment_lookup: Dict[str, SegmentRecord] = {}
+        self.segment_frames: Dict[str, Dict[int, str]] = {}
         self.track_summaries: Dict[str, Dict[int, Dict[str, Any]]] = {}
         self.reader: VideoFrameReader | None = None
         self._frame_cache: OrderedDict[Tuple[str, int], bytes] = OrderedDict()
@@ -285,6 +300,9 @@ class AnnotationState:
         self.ai_boxes = self._load_ai_boxes()
         self.issue_pool = self._load_issue_pool()
         self.issue_lookup = {issue.issue_id: issue for issue in self.issue_pool}
+        self.segment_pool = self._load_segment_pool()
+        self.segment_lookup = {segment.segment_id: segment for segment in self.segment_pool}
+        self.segment_frames = self._load_segment_frame_lookup()
         self.track_summaries = self._load_track_summaries()
         self._init_review_files()
         self._init_database()
@@ -341,6 +359,11 @@ class AnnotationState:
         with self._lock:
             issue = self._pick_next_issue_unlocked(annotator_id=annotator_id)
             return self._issue_payload(issue)
+
+    def assign_next_segment(self, annotator_id: str) -> Dict[str, Any]:
+        with self._lock:
+            segment = self._pick_next_segment_unlocked(annotator_id=annotator_id)
+            return self._segment_payload(segment)
 
     def submit_and_assign_next_issue(
         self,
@@ -703,6 +726,86 @@ class AnnotationState:
                 "next_issue": next_issue,
             }
 
+    def submit_segment(
+        self,
+        annotator_id: str,
+        segment_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        with self._lock:
+            segment = self.segment_lookup.get(segment_id)
+            if segment is None:
+                raise ValueError("segment not found")
+
+            if segment.segment_type == "stable_segment":
+                slots = self._validate_slots_payload(payload.get("slots"))
+                resolved_slots = self._resolve_stable_segment_slots(
+                    video_stem=segment.video_stem,
+                    representative_frame=segment.representative_frame,
+                    slots=slots,
+                )
+                frame_records = self._build_segment_frame_records(
+                    annotator_id=annotator_id,
+                    segment=segment,
+                    slots_by_frame={
+                        frame_index: self._expand_segment_slots_for_frame(
+                            base_slots=resolved_slots,
+                            video_stem=segment.video_stem,
+                            representative_frame=segment.representative_frame,
+                            frame_index=frame_index,
+                        )
+                        for frame_index in range(segment.start_frame, segment.end_frame + 1)
+                    },
+                )
+            elif segment.segment_type == "non_simple_single_frame":
+                record = self._validate_and_build_record(annotator_id, payload)
+                if int(record["frame_index"]) != segment.representative_frame:
+                    raise ValueError("non-simple segment submission must target representative frame")
+                frame_records = [record]
+            else:
+                raise ValueError(f"unsupported segment type: {segment.segment_type}")
+
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                for record in frame_records:
+                    key = (record["video_stem"], int(record["frame_index"]))
+                    self._insert_annotation(conn, record)
+                    self._update_track_person_stats(conn, record)
+                    conn.execute(
+                        """
+                        UPDATE frame_counts
+                        SET annotation_count = annotation_count + 1
+                        WHERE video_stem=? AND frame_index=?
+                        """,
+                        (key[0], key[1]),
+                    )
+                self._mark_segment_resolved(conn, segment, annotator_id, "segment")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            for record in frame_records:
+                self._append_jsonl_record(record)
+                self._append_reviewed_csv(record)
+            self._sync_counts_csv_from_db()
+            next_segment_record = self._pick_next_segment_unlocked(annotator_id=annotator_id, allow_none=True)
+            next_segment = self._segment_payload(next_segment_record) if next_segment_record is not None else None
+            return {
+                "submitted": {
+                    "segment_id": segment.segment_id,
+                    "video_stem": segment.video_stem,
+                    "start_frame": segment.start_frame,
+                    "end_frame": segment.end_frame,
+                    "representative_frame": segment.representative_frame,
+                },
+                "submitted_frame_count": len(frame_records),
+                "next_segment": next_segment,
+            }
+
     def submit_and_assign_next(
         self,
         annotator_id: str,
@@ -1051,6 +1154,12 @@ class AnnotationState:
         target_frame = max(issue.start_frame, min(issue.end_frame, int(frame_index)))
         return self._issue_payload(issue, focus_frame=target_frame)
 
+    def segment_detail(self, segment_id: str) -> Dict[str, Any]:
+        segment = self.segment_lookup.get(segment_id)
+        if segment is None:
+            raise ValueError("segment not found")
+        return self._segment_payload(segment)
+
     def list_issues(self, video_stem: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
         normalized_stem = str(video_stem or "").strip()
         max_items = max(1, min(int(limit), 500))
@@ -1250,6 +1359,7 @@ class AnnotationState:
             if self.reset_storage:
                 conn.executescript(
                     """
+                    DROP TABLE IF EXISTS segment_reviews;
                     DROP TABLE IF EXISTS issue_reviews;
                     DROP TABLE IF EXISTS issue_keyframe_edits;
                     DROP TABLE IF EXISTS track_person_stats;
@@ -1317,6 +1427,15 @@ class AnnotationState:
                     issue_id TEXT PRIMARY KEY,
                     resolved_at TEXT NOT NULL,
                     annotator_id TEXT NOT NULL,
+                    resolution_kind TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS segment_reviews (
+                    segment_id TEXT PRIMARY KEY,
+                    resolved_at TEXT NOT NULL,
+                    annotator_id TEXT NOT NULL,
+                    segment_type TEXT NOT NULL,
+                    representative_frame INTEGER NOT NULL,
                     resolution_kind TEXT NOT NULL
                 );
 
@@ -1570,6 +1689,65 @@ class AnnotationState:
             loaded[video_stem] = track_lookup
         return loaded
 
+    def _load_segment_pool(self) -> List[SegmentRecord]:
+        segment_prep_dir = self.batch_dir / "segment_prep"
+        if not segment_prep_dir.exists():
+            return []
+        segments: List[SegmentRecord] = []
+        for path in sorted(segment_prep_dir.glob("*.segments.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            for item in payload.get("segments", []):
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    segments.append(
+                        SegmentRecord(
+                            segment_id=str(item["segment_id"]).strip(),
+                            video_stem=str(item["video_stem"]).strip(),
+                            segment_type=str(item["segment_type"]).strip(),
+                            start_frame=int(item["start_frame"]),
+                            end_frame=int(item["end_frame"]),
+                            representative_frame=int(item["representative_frame"]),
+                            track_ids=[int(v) for v in item.get("track_ids", [])],
+                            frame_count=int(item["frame_count"]),
+                        )
+                    )
+                except Exception:
+                    continue
+        segments.sort(key=lambda item: (item.video_stem, item.start_frame, item.end_frame, item.segment_id))
+        return segments
+
+    def _load_segment_frame_lookup(self) -> Dict[str, Dict[int, str]]:
+        segment_prep_dir = self.batch_dir / "segment_prep"
+        if not segment_prep_dir.exists():
+            return {}
+        lookup: Dict[str, Dict[int, str]] = {}
+        for path in sorted(segment_prep_dir.glob("*.segment_frames.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            video_stem = str(payload.get("video_stem", "")).strip()
+            if not video_stem:
+                continue
+            frame_map: Dict[int, str] = {}
+            raw = payload.get("frame_to_segment", {})
+            if isinstance(raw, dict):
+                for key, value in raw.items():
+                    try:
+                        frame_map[int(key)] = str(value)
+                    except Exception:
+                        continue
+            lookup[video_stem] = frame_map
+        return lookup
+
     def _expand_slots_for_frame(
         self,
         base_slots: List[Dict[str, Any]],
@@ -1618,6 +1796,187 @@ class AnnotationState:
                 }
             )
         return expanded
+
+    def _resolve_stable_segment_slots(
+        self,
+        video_stem: str,
+        representative_frame: int,
+        slots: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        key = (video_stem, representative_frame)
+        ai_boxes = self.ai_boxes.get(key, [])
+        ai_by_track = {
+            str(int(float(box["track_id"]))): box
+            for box in ai_boxes
+        }
+        claimed: set[str] = set()
+        resolved: List[Dict[str, Any]] = []
+        for item in slots:
+            slot = str(item.get("slot", "")).strip().lower()
+            source = str(item.get("source", "")).strip()
+            if source in {"absent", "not_set"}:
+                resolved.append(empty_slot_record(slot) | {"slot": slot, "source": "absent"})
+                continue
+            if source in {"occluded", "outside"}:
+                raise ValueError("stable segments do not accept occluded/outside states")
+            track_id = str(item.get("ai_track_id", "") or "").strip()
+            if track_id:
+                if track_id not in ai_by_track:
+                    raise ValueError(f"{slot} ai_track_id {track_id} not found on representative frame")
+                if track_id in claimed:
+                    raise ValueError(f"duplicate ai_track_id assignment: {track_id}")
+                claimed.add(track_id)
+                resolved.append({**item, "slot": slot, "ai_track_id": track_id})
+                continue
+            bbox = (
+                _safe_float(item.get("bbox_x", 0.0)),
+                _safe_float(item.get("bbox_y", 0.0)),
+                _safe_float(item.get("bbox_w", 0.0)),
+                _safe_float(item.get("bbox_h", 0.0)),
+            )
+            best_track_id = self._infer_track_id_for_bbox(ai_by_track, bbox, claimed)
+            if not best_track_id:
+                raise ValueError(f"{slot} could not be matched to a unique AI track on representative frame")
+            claimed.add(best_track_id)
+            resolved.append({**item, "slot": slot, "ai_track_id": best_track_id})
+        return self._validate_slots_payload(resolved)
+
+    def _infer_track_id_for_bbox(
+        self,
+        ai_by_track: Dict[str, Dict[str, Any]],
+        bbox: Tuple[float, float, float, float],
+        claimed: set[str],
+    ) -> str | None:
+        x, y, w, h = bbox
+        if w <= 0 or h <= 0:
+            return None
+        candidates: List[Tuple[float, str]] = []
+        for track_id, box in ai_by_track.items():
+            if track_id in claimed:
+                continue
+            overlap = self._bbox_iou(
+                bbox,
+                (
+                    float(box["bbox_x"]),
+                    float(box["bbox_y"]),
+                    float(box["bbox_w"]),
+                    float(box["bbox_h"]),
+                ),
+            )
+            candidates.append((overlap, track_id))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (-item[0], int(item[1])))
+        best_overlap, best_track_id = candidates[0]
+        if best_overlap <= 0.0:
+            return None
+        if len(candidates) > 1 and abs(candidates[1][0] - best_overlap) < 1e-9:
+            return None
+        return best_track_id
+
+    def _bbox_iou(
+        self,
+        box_a: Tuple[float, float, float, float],
+        box_b: Tuple[float, float, float, float],
+    ) -> float:
+        ax, ay, aw, ah = box_a
+        bx, by, bw, bh = box_b
+        ax2, ay2 = ax + aw, ay + ah
+        bx2, by2 = bx + bw, by + bh
+        ix1, iy1 = max(ax, bx), max(ay, by)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+        inter = iw * ih
+        if inter <= 0:
+            return 0.0
+        union = aw * ah + bw * bh - inter
+        return inter / union if union > 0 else 0.0
+
+    def _expand_segment_slots_for_frame(
+        self,
+        base_slots: List[Dict[str, Any]],
+        video_stem: str,
+        representative_frame: int,
+        frame_index: int,
+    ) -> List[Dict[str, Any]]:
+        rep_ai = {
+            str(int(float(box["track_id"]))): box
+            for box in self.ai_boxes.get((video_stem, representative_frame), [])
+        }
+        cur_ai = {
+            str(int(float(box["track_id"]))): box
+            for box in self.ai_boxes.get((video_stem, frame_index), [])
+        }
+        expanded: List[Dict[str, Any]] = []
+        for item in base_slots:
+            slot = str(item.get("slot", "")).strip().lower()
+            source = str(item.get("source", "")).strip()
+            if source == "absent":
+                expanded.append(empty_slot_record(slot) | {"slot": slot, "source": "absent"})
+                continue
+            track_id = str(item.get("ai_track_id", "")).strip()
+            if not track_id:
+                raise ValueError(f"{slot} missing ai_track_id for stable segment expansion")
+            target = cur_ai.get(track_id)
+            if target is None:
+                raise ValueError(f"track {track_id} missing on frame {frame_index}")
+            if source == "ai":
+                expanded.append(
+                    {
+                        "slot": slot,
+                        "bbox_x": _safe_float(target["bbox_x"]),
+                        "bbox_y": _safe_float(target["bbox_y"]),
+                        "bbox_w": _safe_float(target["bbox_w"]),
+                        "bbox_h": _safe_float(target["bbox_h"]),
+                        "source": "ai",
+                        "ai_track_id": track_id,
+                    }
+                )
+                continue
+            rep_box = rep_ai.get(track_id)
+            if rep_box is None:
+                raise ValueError(f"track {track_id} missing on representative frame")
+            dx = _safe_float(float(item.get("bbox_x", 0.0)) - float(rep_box["bbox_x"]))
+            dy = _safe_float(float(item.get("bbox_y", 0.0)) - float(rep_box["bbox_y"]))
+            dw = _safe_float(float(item.get("bbox_w", 0.0)) - float(rep_box["bbox_w"]))
+            dh = _safe_float(float(item.get("bbox_h", 0.0)) - float(rep_box["bbox_h"]))
+            expanded.append(
+                {
+                    "slot": slot,
+                    "bbox_x": _safe_float(float(target["bbox_x"]) + dx),
+                    "bbox_y": _safe_float(float(target["bbox_y"]) + dy),
+                    "bbox_w": _safe_float(float(target["bbox_w"]) + dw),
+                    "bbox_h": _safe_float(float(target["bbox_h"]) + dh),
+                    "source": "manual_param",
+                    "ai_track_id": track_id,
+                }
+            )
+        return expanded
+
+    def _build_segment_frame_records(
+        self,
+        annotator_id: str,
+        segment: SegmentRecord,
+        slots_by_frame: Dict[int, List[Dict[str, Any]]],
+    ) -> List[Dict[str, Any]]:
+        frame_records: List[Dict[str, Any]] = []
+        for frame_index in range(segment.start_frame, segment.end_frame + 1):
+            key = (segment.video_stem, frame_index)
+            if key not in self.frame_lookup:
+                continue
+            rec = self.frame_lookup[key]
+            frame_records.append(
+                {
+                    "annotation_id": f"ann_{int(time.time() * 1000)}_{uuid.uuid4().hex[:10]}",
+                    "video_stem": segment.video_stem,
+                    "frame_index": frame_index,
+                    "timestamp_ms": _safe_float(rec.timestamp_ms),
+                    "annotator_id": annotator_id,
+                    "submitted_at": _now_iso(),
+                    "slots_json": json.dumps(slots_by_frame[frame_index], ensure_ascii=False),
+                }
+            )
+        return frame_records
 
     def _expand_single_slot(
         self,
@@ -1767,6 +2126,37 @@ class AnnotationState:
         self._issue_dispatch_index += 1
         return issue
 
+    def _resolved_segment_ids(self, conn: sqlite3.Connection | None = None) -> set[str]:
+        own_conn = conn is None
+        if conn is None:
+            conn = self._connect()
+        try:
+            rows = conn.execute("SELECT segment_id FROM segment_reviews").fetchall()
+            return {str(row["segment_id"]) for row in rows}
+        finally:
+            if own_conn:
+                conn.close()
+
+    def _pick_next_segment_unlocked(
+        self,
+        annotator_id: str | None = None,
+        allow_none: bool = False,
+    ) -> SegmentRecord | None:
+        del annotator_id
+        if not self.segment_pool:
+            if allow_none:
+                return None
+            raise ValueError("segment pool is empty")
+        resolved_ids = self._resolved_segment_ids()
+        unresolved = [segment for segment in self.segment_pool if segment.segment_id not in resolved_ids]
+        if not unresolved:
+            if allow_none:
+                return None
+            raise ValueError("no unresolved segments left")
+        segment = unresolved[self._issue_dispatch_index % len(unresolved)]
+        self._issue_dispatch_index += 1
+        return segment
+
     def _mark_issue_resolved(
         self,
         conn: sqlite3.Connection,
@@ -1785,6 +2175,35 @@ class AnnotationState:
             VALUES (?, ?, ?, ?)
             """,
             (issue_id, _now_iso(), annotator_id, resolution_kind),
+        )
+
+    def _mark_segment_resolved(
+        self,
+        conn: sqlite3.Connection,
+        segment: SegmentRecord,
+        annotator_id: str,
+        resolution_kind: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO segment_reviews (
+                segment_id,
+                resolved_at,
+                annotator_id,
+                segment_type,
+                representative_frame,
+                resolution_kind
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                segment.segment_id,
+                _now_iso(),
+                annotator_id,
+                segment.segment_type,
+                segment.representative_frame,
+                resolution_kind,
+            ),
         )
 
     def _annotation_count_for_frame(self, video_stem: str, frame_index: int) -> int:
@@ -1893,6 +2312,23 @@ class AnnotationState:
                 "imu_count": issue.imu_count,
                 "issue_tracks": self._issue_tracks_payload(issue, focus_frame),
                 "focus_frame_index": focus_frame,
+            },
+            "frame": frame,
+        }
+
+    def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
+        annotation_count = self._annotation_count_for_frame(segment.video_stem, segment.representative_frame)
+        frame = self._build_frame_payload(segment.video_stem, segment.representative_frame, annotation_count)
+        return {
+            "segment": {
+                "segment_id": segment.segment_id,
+                "video_stem": segment.video_stem,
+                "segment_type": segment.segment_type,
+                "start_frame": segment.start_frame,
+                "end_frame": segment.end_frame,
+                "representative_frame": segment.representative_frame,
+                "track_ids": segment.track_ids,
+                "frame_count": segment.frame_count,
             },
             "frame": frame,
         }
@@ -2351,6 +2787,8 @@ class UiHandler(BaseHTTPRequestHandler):
             return self._handle_issue_detail(parsed.query)
         if path == "/api/issue_frame":
             return self._handle_issue_frame(parsed.query)
+        if path == "/api/segment_detail":
+            return self._handle_segment_detail(parsed.query)
         if path == "/api/frame_image":
             return self._handle_frame_image(parsed.query)
         if path == "/":
@@ -2366,10 +2804,14 @@ class UiHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/api/next_frame":
             return self._handle_next_frame()
+        if path == "/api/next_segment":
+            return self._handle_next_segment()
         if path == "/api/next_issue":
             return self._handle_next_issue()
         if path == "/api/submit":
             return self._handle_submit()
+        if path == "/api/submit_segment":
+            return self._handle_submit_segment()
         if path == "/api/submit_issue":
             return self._handle_submit_issue()
         if path == "/api/submit_issue_propagation":
@@ -2426,6 +2868,21 @@ class UiHandler(BaseHTTPRequestHandler):
             )
         self._send_json(HTTPStatus.OK, {"ok": True, **result})
 
+    def _handle_next_segment(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.assign_next_segment(annotator_id=annotator_id)
+        except Exception as exc:
+            self.state.logger.error(f"next_segment failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
     def _handle_next_issue(self) -> None:
         payload = self._read_json_payload()
         if payload is None:
@@ -2450,6 +2907,31 @@ class UiHandler(BaseHTTPRequestHandler):
             result = self.state.submit_and_assign_next(annotator_id=annotator_id, payload=payload)
         except Exception as exc:
             self.state.logger.error(f"submit failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit_segment(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        segment_id = str(payload.get("segment_id", "")).strip()
+        if not segment_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "segment_id is required"},
+            )
+        try:
+            result = self.state.submit_segment(
+                annotator_id=annotator_id,
+                segment_id=segment_id,
+                payload=payload,
+            )
+        except Exception as exc:
+            self.state.logger.error(f"submit_segment failed annotator={annotator_id} segment_id={segment_id}: {exc}")
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},
@@ -2739,6 +3221,24 @@ class UiHandler(BaseHTTPRequestHandler):
             data = self.state.issue_frame(issue_id, frame_index)
         except Exception as exc:
             self.state.logger.error(f"issue_frame failed issue_id={issue_id} frame_index={frame_index_raw}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **data})
+
+    def _handle_segment_detail(self, query: str) -> None:
+        q = parse_qs(query)
+        segment_id = str(q.get("segment_id", [""])[0]).strip()
+        if not segment_id:
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "segment_id is required"},
+            )
+        try:
+            data = self.state.segment_detail(segment_id)
+        except Exception as exc:
+            self.state.logger.error(f"segment_detail failed segment_id={segment_id}: {exc}")
             return self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},

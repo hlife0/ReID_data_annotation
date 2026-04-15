@@ -3,8 +3,8 @@
 当前文档体系里，最重要的已经不是旧的单阶段说明，而是：
 
 - 当前系统现在长什么样
-- 当前轨迹级 review 主线推进到了哪里
-- 当前 issue / 风险分层是怎么工作的
+- 当前段模式主线推进到了哪里
+- 当前稳定段 / 非简单帧是怎么工作的
 
 如果你只想最快建立全局理解，推荐阅读顺序如下。
 
@@ -14,10 +14,10 @@
 
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
    - 当前仓库入口、目录、命令和正式 batch
-2. [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
-   - 当前主控文档，描述 R0-R6 推进状态
-3. [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
-   - 当前 issue 生成、green/auto-pass/QA、提交与传播算法
+2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+   - 当前段模式主需求文档
+3. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
+   - 稳定段与非简单帧的数学定义
 4. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
    - 当前 review/admin 栈的实际运行形态
 5. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
@@ -29,8 +29,8 @@
 
 ### 当前主线
 
-- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
-- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 
@@ -56,13 +56,13 @@
 
 1. 当前统一代码目录是 `./codes/`
 2. 当前正式 batch 是 `./annotation/batch_20260413_v01`
-3. 当前默认 review 工作单位是 `issue`，不是单帧
+3. 当前默认 review 工作单位是“标注段”，不是单帧
 4. 当前 review 重点是：
-   - issue-mode
-   - 关键帧
-   - 智能传播
-   - 红黄绿风险分层
-   - green 自动通过 + QA 抽样
+   - 稳定段
+   - 单帧非简单帧
+   - 代表帧标注
+   - 段级身份映射
+   - 逐帧 `p1-p7` 结果生成
 
 如果你发现某份旧文档还在强烈强调：
 
@@ -74,7 +74,7 @@
 请优先以：
 
 - [README.md](/home/hrli/data_annotation/docs/README.md)
-- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
-- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 
 为准。

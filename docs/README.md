@@ -1,6 +1,6 @@
 # Data Annotation Pipeline
 
-本仓库当前已经不只是“逐帧双人框标注工具”，而是一套围绕 **AI 预标注 + issue-mode 轨迹级复核 + 风险分层 QA** 的完整标注流程。
+本仓库当前已经不只是“逐帧双人框标注工具”，而是一套围绕 **AI 预标注 + 段模式复核 + 逐帧 `p1-p7` 结果生成** 的标注流程。
 
 当前统一代码目录是：
 
@@ -17,27 +17,26 @@
 截至当前版本，主线能力如下：
 
 1. A 阶段：预标注批处理可从 `data/required/` 生成 `pseudo_labels/*.auto.csv`
-2. B 阶段：review/admin 服务可稳定加载正式 batch，并支持 issue-mode 复核
-3. X 主线：轨迹级 review 已打通首版
-   - issue list / timeline
-   - issue 内导航
-   - 整段 / 半段应用
-   - 关键帧智能传播
-   - 轨迹工作台
-   - `split / merge / reappear / occluded / outside` 首版
-4. R5 首版：离线 `review_prep` 已支持红/黄/绿风险分层、green `auto_pass`、green `qa_sample`
-5. admin 面板已能显示：
-   - 红 / 黄 / 绿段数量
-   - `auto_pass_span_count`
-   - `qa_sample_span_count`
+2. B/Y 阶段：review 服务已开始切到段模式
+3. 离线主线已新增：
+   - `codes/process_segment_review_prep.py`
+   - `segment_prep/*.segments.json`
+   - `segment_prep/*.segment_frames.json`
+   - `segment_prep/segment_prep_summary.json`
+4. 段模式主语义已明确为：
+   - `stable_segment`
+   - `non_simple_single_frame`
+5. 数学定义文档与段模式需求文档已建立
 
-更细的执行状态见：
+当前主线规范见：
 
-- [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
+- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
+- [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 
-算法和流程详解见：
+历史 `issue-mode` 文档已归档：
 
-- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+- [archive/legacy_issue_mode/ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/archive/legacy_issue_mode/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
 
 ---
 
@@ -47,8 +46,7 @@
 .
 ├── codes/
 │   ├── process_prelabel_batch.py
-│   ├── process_review_issue_prep.py
-│   ├── review_propagation.py
+│   ├── process_segment_review_prep.py
 │   ├── ui_review_server.py
 │   ├── ui_admin_server.py
 │   ├── ui_review_web/
@@ -68,16 +66,16 @@
 如果你是第一次接手，推荐顺序：
 
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
-2. [REQUIREMENTS_TRAJECTORY_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRAJECTORY_REVIEW.md)
-3. [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
-4. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-5. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
-6. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+3. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
+4. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+5. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+6. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 
 如果你只关心标注界面怎么用：
 
 1. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-2. [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
 
 ---
 
@@ -87,39 +85,37 @@
 flowchart LR
     A[data/required] --> B[process_prelabel_batch.py]
     B --> C[batch/pseudo_labels/*.auto.csv]
-    C --> D[process_review_issue_prep.py]
-    D --> E[batch/review_prep]
+    C --> D[process_segment_review_prep.py]
+    D --> E[batch/segment_prep]
     E --> F[ui_review_server.py]
-    E --> G[ui_admin_server.py]
-    F --> H[issue-mode review UI]
-    H --> I[reviewed_raw/*.jsonl]
-    H --> J[reviewed/*.csv]
+    F --> G[segment-mode review UI]
+    G --> H[reviewed_raw/*.jsonl]
+    G --> I[reviewed/*.csv]
 ```
 
 ### 这条主线里每一步的角色
 
 - `process_prelabel_batch.py`
   - 负责 A 阶段 AI 预标注
-- `process_review_issue_prep.py`
+- `process_segment_review_prep.py`
   - 负责离线生成：
-    - `track_summary.json`
-    - `risk_spans.json`
-    - `issue_pool.csv`
-    - `review_prep_summary.json`
+    - `segments.json`
+    - `segment_frames.json`
+    - `segment_prep_summary.json`
 - `ui_review_server.py`
-  - 负责在线派单、issue detail、提交、传播与导出
+  - 负责在线段级派单、代表帧加载、提交与逐帧展开
 - `ui_admin_server.py`
-  - 负责看全局统计、annotator 活跃度和风险分层
+  - 负责看全局统计与 annotator 活跃度
 
 ---
 
 ## 常用命令
 
-### 1. 运行离线 review prep
+### 1. 运行离线 segment prep
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process_review_issue_prep.py \
+PYTHONPATH=codes .venv/bin/python codes/process_segment_review_prep.py \
   --batch-dir ./annotation/batch_20260413_v01
 ```
 
@@ -159,7 +155,9 @@ PYTHONPATH=codes .venv/bin/python -m unittest \
   codes.test_repo_layout \
   codes.test_ui_review_server \
   codes.test_review_propagation \
-  codes.test_process_review_issue_prep
+  codes.test_process_review_issue_prep \
+  codes.test_process_segment_review_prep \
+  codes.test_segment_review_server
 ```
 
 ### 5. JS 语法检查
@@ -176,57 +174,31 @@ node --check codes/ui_admin_web/app.js
 
 当前 review UI 的默认心智模型不是：
 
-- “给我下一帧”
+- “给我下一段的一张代表图”
 
 而是：
 
-- “给我下一段值得看的问题轨迹”
+- “给我下一段待标注的小段”
 
 也就是说，默认工作单位已经从：
 
-- 单帧
+- 逐帧随机图片
 
 变成：
 
-- issue
-- 关键帧
-- 轨迹区间
+- `stable_segment`
+- `non_simple_single_frame`
 
 推荐用法是：
 
-1. 点 `下一问题点`
-2. 看 issue 摘要和轨迹工作台
-3. 修 1 到几个关键帧
-4. 用 `智能传播整段`
-5. 再进入下一条 issue
+1. 点 `下一段`
+2. 在代表图上直接标图片
+3. 提交并进入下一段
 
 详见：
 
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-
----
-
-## 现在的风险分层
-
-离线 `review_prep` 当前会把区间分成：
-
-- `red`
-  - 明显高风险，人工重点处理
-- `yellow`
-  - 中风险，仍进入 issue review
-- `green`
-  - 稳定段，默认 `auto_pass`
-  - 少量抽样进入 `qa_sample`
-
-注意：
-
-- `green` 不等于“被证明正确”
-- 它只表示“没触发当前启发式风险规则”
-
-这也是为什么必须保留：
-
-- `qa_sample`
-- admin 风险统计
+- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
 
 ---
 
@@ -234,21 +206,18 @@ node --check codes/ui_admin_web/app.js
 
 当前系统已经可用，但还不是终态。最值得知道的限制有：
 
-1. green 稳定段仍可能“稳定地错”
-2. 完全漏检帧的表达能力还不够强
-3. `submit_issue` 单帧提交仍可能过早结束整个 issue
-4. 当前没有真正的 issue 加锁派单
-5. `issue_id` 仍是排序编号，不是稳定主键
-6. 智能传播仍然比较依赖 AI 轨迹质量
-
-更细说明见：
-
-- [ISSUE_TRAJECTORY_REVIEW_FLOW.md](/home/hrli/data_annotation/docs/ISSUE_TRAJECTORY_REVIEW_FLOW.md)
+1. 段模式已建立，但主服务仍处于迁移期
+2. 旧 `issue-mode` 代码仍在仓库中，作为历史兼容残留
+3. 稳定段定义当前只吸收了 `low_score + overlap + track-set constancy`
+4. `bbox_jump` 等旧风险信号还没有进入新的数学定义主线
+5. 文档主线已切到段模式，但部分历史文档仍保留旧阶段上下文
 
 ---
 
 ## 其他文档
 
+- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)

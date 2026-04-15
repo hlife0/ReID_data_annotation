@@ -1,5 +1,7 @@
 # 需求文档 X：轨迹级问题驱动标注提效规范（规划与执行跟踪版）
 
+> 历史追踪说明：本文件主要记录仓库从逐帧 / issue-mode 过渡到轨迹级 review 的历史主线。当前执行主线已切到段模式，请优先参考 [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)。
+
 最后更新：2026-04-15（R4 智能传播 / R5 风险分层与 QA 首版已打通）
 
 ## 1. 文档定位
