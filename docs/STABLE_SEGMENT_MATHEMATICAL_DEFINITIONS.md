@@ -1,4 +1,4 @@
-# 轨迹级 Review 数学定义（公理化版本）
+# 稳定段与非简单帧数学定义（公理化版本）
 
 本文档仅给出一组**数学定义**，用于统一后续设计、实现与讨论中的术语。
 
@@ -17,8 +17,10 @@
 - 函数
 - 关系
 - 区间
+- 简单帧
 - 稳定段
-- $issue$
+- 非简单帧
+- 小段分解
 - 身份映射
 - 帧级结果
 
@@ -288,38 +290,39 @@ $$
 
 ---
 
-## 7. Issue
+## 7. 非简单帧
 
-### 7.1 issue 帧集合
+### 7.1 非简单帧集合
 
-定义 $session \Sigma$ 的 issue 帧集合为稳定帧集合在 $F_{\Sigma}$ 中的补：
+定义 $session \Sigma$ 的非简单帧集合为简单帧集合在 $F_{\Sigma}$ 中的补：
 
 $$
-\mathrm{Iss}_{\Sigma}
+\mathrm{NS}_{\Sigma}
 :=
-F_{\Sigma}\setminus \mathrm{Stab}_{\Sigma}.
+F_{\Sigma}\setminus \mathrm{Simple}_{\Sigma}.
 $$
 
-### 7.2 issue 区间
+### 7.2 单帧非简单区间
 
-称非空区间 $I\subseteq F_{\Sigma}$ 为 $session \Sigma$ 的一个 **issue 区间**，当且仅当：
-
-1. $I \subseteq \mathrm{Iss}_{\Sigma}$
-2. $I$ 是 $\mathrm{Iss}_{\Sigma}$ 中的极大离散区间
-
-换言之，issue 区间就是 issue 帧集合的极大连续分量。
-
-### 7.3 issue 族
-
-记 $\Sigma$ 上所有 issue 区间的集合为
+对任意 $t \in \mathrm{NS}_{\Sigma}$，定义对应的**单帧非简单区间**为
 
 $$
-\mathcal{I}_{\Sigma}.
+N_{\Sigma}(t) := [t,t].
+$$
+
+### 7.3 非简单单帧族
+
+记 $\Sigma$ 上所有单帧非简单区间的集合为
+
+$$
+\mathcal{N}_{\Sigma}
+:=
+\{N_{\Sigma}(t): t\in \mathrm{NS}_{\Sigma}\}.
 $$
 
 ---
 
-## 8. 稳定段与 issue 的分解
+## 8. 小段分解
 
 ### 命题 8.1
 
@@ -328,16 +331,16 @@ $$
 $$
 F_{\Sigma}
 =
-\mathrm{Stab}_{\Sigma}
+\mathrm{Simple}_{\Sigma}
 \sqcup
-\mathrm{Iss}_{\Sigma},
+\mathrm{NS}_{\Sigma},
 $$
 
 其中 $\sqcup$ 表示不交并。
 
 ### 命题 8.2
 
-集合族 $\mathcal{S}_{\Sigma}\cup \mathcal{I}_{\Sigma}$ 构成 $F_{\Sigma}$ 的一个不交区间分解。
+集合族 $\mathcal{S}_{\Sigma}\cup \mathcal{N}_{\Sigma}$ 构成 $F_{\Sigma}$ 的一个不交区间分解。
 
 即：
 
@@ -347,21 +350,22 @@ $$
 
 ### 命题 8.3
 
-若 $S=[m,n]\in\mathcal{S}_{\Sigma}$ 且 $m>1$，则存在唯一的区间 $I\in\mathcal{I}_{\Sigma}$ 满足：
+对任意 $t\in \mathrm{Simple}_{\Sigma}$，存在且仅存在一个稳定段 $S\in \mathcal{S}_{\Sigma}$ 满足
 
 $$
-\max I = m-1
+t\in S.
 $$
 
-或存在唯一的区间 $S' \in \mathcal{S}_{\Sigma}$ 满足：
+对任意 $t\in \mathrm{NS}_{\Sigma}$，存在且仅存在一个单帧非简单区间 $N\in \mathcal{N}_{\Sigma}$ 满足
 
 $$
-\max S' = m-1.
+t\in N.
 $$
 
-即任一非首稳定段左侧，紧邻它的要么是一个 issue 区间，要么是另一个稳定段；不存在空洞。
+因此每一帧恰好属于如下两类小段之一：
 
-同理，若 $S=[m,n]\in\mathcal{S}_{\Sigma}$ 且 $n<T_{\Sigma}$，则其右侧也存在唯一紧邻区间。
+1. 一个稳定段
+2. 一个单帧非简单区间
 
 ---
 
@@ -531,15 +535,12 @@ $$
 
 ### 命题 13.3
 
-若 $S=[m,n]\in\mathcal{S}_{\Sigma}$，则 $m$ 之前的所有不稳定性均不属于 $S$ 的定义内容。
+若 $S=[m,n]\in\mathcal{S}_{\Sigma}$，则 $S$ 的稳定性仅依赖于区间内部的性质，而与 $m-1$ 或 $n+1$ 上发生的现象无关。
 
-也就是说，$S$ 的稳定性仅依赖于区间内部的性质，而不依赖于 $m-1$ 帧是否与 $m$ 具有相同的轨迹集合。
+因此，稳定段的定义是**内禀的**，即：
 
-因此：
-
-- 稳定段的左邻域可以是 $issue$ 区间
-- 也可以是另一个稳定段
-- 但这不会改变 $S$ 作为稳定段的定义
+- 只由区间内部轨迹集合是否恒定决定
+- 只由区间内部各帧是否简单决定
 
 ---
 
@@ -548,14 +549,15 @@ $$
 对一个给定 $session \Sigma$，轨迹级 review 的纯数学目标可表述为：
 
 1. 求出稳定段族 $\mathcal{S}_{\Sigma}$
-2. 求出 issue 族 $\mathcal{I}_{\Sigma}$
-3. 对每个稳定段 $S\in\mathcal{S}_{\Sigma}$，构造其段级身份映射
+2. 求出非简单帧集合 $\mathrm{NS}_{\Sigma}$
+3. 求出小段分解 $\mathcal{S}_{\Sigma}\cup \mathcal{N}_{\Sigma}$
+4. 对每个稳定段 $S\in\mathcal{S}_{\Sigma}$，构造其段级身份映射
 
 $$
 \phi_S:K_{\Sigma}(S)\to P
 $$
 
-4. 由这些段级身份映射与 issue 区间上的补充定义，共同构造全局帧级结果
+5. 由这些稳定段身份映射与非简单帧上的补充定义，共同构造全局帧级结果
 
 $$
 R_{\Sigma}:F_{\Sigma}\times P\to \mathcal{Q}.
@@ -564,8 +566,8 @@ $$
 本文档到此为止，不再规定：
 
 - 如何求 $\mathcal{S}_{\Sigma}$
-- 如何求 $\mathcal{I}_{\Sigma}$
+- 如何求 $\mathrm{NS}_{\Sigma}$
 - 如何构造 $\phi_S$
-- 如何在 issue 区间上定义 $R_{\Sigma}$
+- 如何在单帧非简单区间上定义 $R_{\Sigma}$
 
 这些都属于后续算法、系统设计或人工流程的问题，不属于本定义文档。
