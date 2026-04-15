@@ -126,10 +126,10 @@ $$
 对每个 $t \in F_{\Sigma}$，定义
 
 $$
-\operatorname{ov}_{\Sigma,t} : A_{\Sigma}(t)\times A_{\Sigma}(t)\to [0,1].
+\mathrm{ov}_{\Sigma,t} : A_{\Sigma}(t)\times A_{\Sigma}(t)\to [0,1].
 $$
 
-其中 $\operatorname{ov}_{\Sigma,t}(k_1,k_2)$ 表示第 $t$ 帧中轨迹 $k_1$ 与 $k_2$ 的重叠度。
+其中 $\mathrm{ov}_{\Sigma,t}(k_1,k_2)$ 表示第 $t$ 帧中轨迹 $k_1$ 与 $k_2$ 的重叠度。
 
 本文档不规定其具体计算公式，只要求其值域位于 $[0,1]$。
 
@@ -202,7 +202,7 @@ $$
 $$
 \forall t\in I,\ \forall k_1,k_2\in A_{\Sigma}(t),\ k_1\ne k_2
 \Longrightarrow
-\operatorname{ov}_{\Sigma,t}(k_1,k_2)\le \tau_{\mathrm{ov}}.
+\mathrm{ov}_{\Sigma,t}(k_1,k_2)\le \tau_{\mathrm{ov}}.
 $$
 
 条件 1 已经蕴含：
@@ -233,7 +233,7 @@ $$
 定义稳定帧集合
 
 $$
-\operatorname{Stab}_{\Sigma}
+\mathrm{Stab}_{\Sigma}
 :=
 \bigcup_{S\in\mathcal{S}_{\Sigma}} S.
 $$
@@ -247,17 +247,17 @@ $$
 定义 $session \Sigma$ 的 issue 帧集合为稳定帧集合在 $F_{\Sigma}$ 中的补：
 
 $$
-\operatorname{Iss}_{\Sigma}
+\mathrm{Iss}_{\Sigma}
 :=
-F_{\Sigma}\setminus \operatorname{Stab}_{\Sigma}.
+F_{\Sigma}\setminus \mathrm{Stab}_{\Sigma}.
 $$
 
 ### 6.2 issue 区间
 
 称非空区间 $I\subseteq F_{\Sigma}$ 为 $session \Sigma$ 的一个 **issue 区间**，当且仅当：
 
-1. $I \subseteq \operatorname{Iss}_{\Sigma}$
-2. $I$ 是 $\operatorname{Iss}_{\Sigma}$ 中的极大离散区间
+1. $I \subseteq \mathrm{Iss}_{\Sigma}$
+2. $I$ 是 $\mathrm{Iss}_{\Sigma}$ 中的极大离散区间
 
 换言之，issue 区间就是 issue 帧集合的极大连续分量。
 
@@ -280,9 +280,9 @@ $$
 $$
 F_{\Sigma}
 =
-\operatorname{Stab}_{\Sigma}
+\mathrm{Stab}_{\Sigma}
 \sqcup
-\operatorname{Iss}_{\Sigma},
+\mathrm{Iss}_{\Sigma},
 $$
 
 其中 $\sqcup$ 表示不交并。
@@ -367,17 +367,17 @@ $$
 $$
 \mathcal{Q}
 :=
-\{\operatorname{absent},\operatorname{occluded},\operatorname{outside}\}
+\{\mathrm{absent},\mathrm{occluded},\mathrm{outside}\}
 \cup
-\bigl(\{\operatorname{visible}\}\times \mathcal{B}\bigr).
+\bigl(\{\mathrm{visible}\}\times \mathcal{B}\bigr).
 $$
 
 元素解释如下：
 
-- $\operatorname{absent}$：该人物在该帧结果中不存在
-- $\operatorname{occluded}$：该人物在该帧结果中被遮挡
-- $\operatorname{outside}$：该人物在该帧结果中位于画面外
-- $(\operatorname{visible},b)$：该人物在该帧结果中可见，且边框为 $b$
+- $\mathrm{absent}$：该人物在该帧结果中不存在
+- $\mathrm{occluded}$：该人物在该帧结果中被遮挡
+- $\mathrm{outside}$：该人物在该帧结果中位于画面外
+- $(\mathrm{visible},b)$：该人物在该帧结果中可见，且边框为 $b$
 
 ### 9.2 帧级最终结果
 
@@ -418,13 +418,13 @@ $$
 $$
 R_{\Sigma}^S(t,p)
 =
-(\operatorname{visible}, b_{\Sigma,t}(k)).
+(\mathrm{visible}, b_{\Sigma,t}(k)).
 $$
 
 2. 若不存在 $k\in K_{\Sigma}(S)$ 满足 $\phi_S(k)=p$，则
 
 $$
-R_{\Sigma}^S(t,p)=\operatorname{absent}.
+R_{\Sigma}^S(t,p)=\mathrm{absent}.
 $$
 
 由于稳定段中 $K_{\Sigma}(S)$ 在每一帧恒定，因此上述定义良定。
