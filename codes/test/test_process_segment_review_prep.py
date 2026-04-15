@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import process_segment_review_prep as mod
+from process import process_segment_review_prep as mod
 
 
 class SegmentReviewPrepTests(unittest.TestCase):

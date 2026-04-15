@@ -49,11 +49,11 @@
   - `video_stem, frame_index, timestamp_ms, imu_id_a, imu_id_b, static_coef_a, static_coef_b, coef_type, coef_a, coef_b, k_t, m_t, rank_m_desc`
 - 排序规则：先按 `m_t` 降序，再按 `timestamp_ms` 升序；`rank_m_desc` 从 1 开始连续编号。
 - 每视频输出 summary JSON，记录算法公式、参数、异常处理、统计和建议回放区间。
-- 额外使用 `codes/test_imu_mapping_outputs.py` 做字段、公式、排序、rank 连续性校验。
+- 额外使用 `codes/test/test_imu_mapping_outputs.py` 做字段、公式、排序、rank 连续性校验。
 
 ## 3. 本次运行结果总览
 
-- 运行命令：` .venv/bin/python ./codes/process_imu_mapping_batch.py --required-root ./data/required --output-root ./annotation --coef-type motion --smoothing-window 5 --max-align-gap-ms 250 `
+- 运行命令：` .venv/bin/python ./codes/process/process_imu_mapping_batch.py --required-root ./data/required --output-root ./annotation --coef-type motion --smoothing-window 5 --max-align-gap-ms 250 `
 - 输出批次：`annotation/batch_20260306_v02`
 - 处理视频数：4
 - 成功：4，blocked：0，failed：0

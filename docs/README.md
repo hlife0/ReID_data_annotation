@@ -5,6 +5,8 @@
 当前统一代码目录是：
 
 - `./codes/`
+- 当前代码分区说明见：
+  - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 
 当前正式批次是：
 
@@ -19,10 +21,11 @@
 1. A 阶段：预标注批处理可从 `data/required/` 生成 `pseudo_labels/*.auto.csv`
 2. B/Y 阶段：review 服务已开始切到段模式
 3. 离线主线已新增：
-   - `codes/process_segment_review_prep.py`
+   - `codes/process/process_segment_review_prep.py`
    - `segment_prep/*.segments.json`
    - `segment_prep/*.segment_frames.json`
    - `segment_prep/segment_prep_summary.json`
+   - `codes/process/README.md`
 4. 段模式主语义已明确为：
    - `stable_segment`
    - `non_simple_single_frame`
@@ -45,13 +48,10 @@
 ```text
 .
 ├── codes/
-│   ├── process_prelabel_batch.py
-│   ├── process_segment_review_prep.py
-│   ├── ui_review_server.py
-│   ├── ui_admin_server.py
-│   ├── ui_review_web/
-│   ├── ui_admin_web/
-│   └── test_*.py
+│   ├── application/
+│   ├── process/
+│   ├── test/
+│   └── archive/
 ├── docs/
 ├── data/
 ├── annotation/
@@ -71,6 +71,8 @@
 4. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 5. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 6. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
+7. [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+8. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
 如果你只关心标注界面怎么用：
 
@@ -83,11 +85,11 @@
 
 ```mermaid
 flowchart LR
-    A[data/required] --> B[process_prelabel_batch.py]
+    A[data/required] --> B[process/process_prelabel_batch.py]
     B --> C[batch/pseudo_labels/*.auto.csv]
-    C --> D[process_segment_review_prep.py]
+    C --> D[process/process_segment_review_prep.py]
     D --> E[batch/segment_prep]
-    E --> F[ui_review_server.py]
+    E --> F[application/ui_review_server.py]
     F --> G[segment-mode review UI]
     G --> H[reviewed_raw/*.jsonl]
     G --> I[reviewed/*.csv]
@@ -95,17 +97,19 @@ flowchart LR
 
 ### 这条主线里每一步的角色
 
-- `process_prelabel_batch.py`
+- `process/process_prelabel_batch.py`
   - 负责 A 阶段 AI 预标注
-- `process_segment_review_prep.py`
+- `process/process_segment_review_prep.py`
   - 负责离线生成：
     - `segments.json`
     - `segment_frames.json`
     - `segment_prep_summary.json`
-- `ui_review_server.py`
+- `application/ui_review_server.py`
   - 负责在线段级派单、代表帧加载、提交与逐帧展开
-- `ui_admin_server.py`
+- `application/ui_admin_server.py`
   - 负责看全局统计与 annotator 活跃度
+- `process/README.md`
+  - 负责说明整个处理流程先后顺序
 
 ---
 
@@ -115,7 +119,7 @@ flowchart LR
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process_segment_review_prep.py \
+PYTHONPATH=codes .venv/bin/python codes/process/process_segment_review_prep.py \
   --batch-dir ./annotation/batch_20260413_v01
 ```
 
@@ -123,7 +127,7 @@ PYTHONPATH=codes .venv/bin/python codes/process_segment_review_prep.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/ui_review_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10086
@@ -137,7 +141,7 @@ PYTHONPATH=codes .venv/bin/python codes/ui_review_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/ui_admin_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10087
@@ -151,19 +155,15 @@ PYTHONPATH=codes .venv/bin/python codes/ui_admin_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python -m unittest \
-  codes.test_repo_layout \
-  codes.test_ui_review_server \
-  codes.test_process_segment_review_prep \
-  codes.test_segment_review_server
+PYTHONPATH=codes .venv/bin/python -m unittest discover -s codes/test
 ```
 
 ### 5. JS 语法检查
 
 ```bash
 cd /home/hrli/data_annotation
-node --check codes/ui_review_web/app.js
-node --check codes/ui_admin_web/app.js
+node --check codes/application/ui_review_web/app.js
+node --check codes/application/ui_admin_web/app.js
 ```
 
 ---
@@ -215,10 +215,11 @@ node --check codes/ui_admin_web/app.js
 
 - [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
+- [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+- [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
-- [REQUIREMENTS_TRACK_RECOMMENDATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md)
 - [REQUIREMENTS_ANNOTATION_ANALYSIS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md)
 - [REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md)
 - [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)

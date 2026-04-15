@@ -1,5 +1,11 @@
 # 需求文档 H：最终 Annotation 融合导出（实现对齐版）
 
+说明：
+
+- 本文档描述的是当前下游最终导出脚本的实现口径。
+- 它仍然带有较强的旧 `P1/P2 + review_decisions` 历史结构。
+- 当前段模式主线已经切到 `stable_segment / non_simple_single_frame`，因此这里应视为“下游遗留脚本说明”，不是当前 review 主线规范。
+
 ## 1. 目标
 
 本阶段目标：综合原始多标注结果、Dice 分析结果与人工复审结果，生成每个视频一份最终定稿 annotation CSV。
@@ -15,7 +21,7 @@
 
 ## 2. 当前实现入口
 
-主脚本：`./codes/process_final_annotation_batch.py`
+主脚本：`./codes/process/process_final_annotation_batch.py`
 
 ---
 

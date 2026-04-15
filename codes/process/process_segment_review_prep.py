@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
-import segment_prep_common as common
+from process import segment_prep_common as common
 
 
 LOW_SCORE_THRESHOLD = 0.6

@@ -9,7 +9,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-import ui_review_server as mod
+from application import ui_review_server as mod
 
 
 class DynamicSlotReviewStateTests(unittest.TestCase):
@@ -87,7 +87,7 @@ class DynamicSlotReviewStateTests(unittest.TestCase):
     def _make_state(self) -> mod.AnnotationState:
         state = mod.AnnotationState(
             batch_dir=self.batch_dir,
-            static_dir=Path("codes/ui_review_web"),
+            static_dir=Path("codes/application/ui_review_web"),
             seed=123,
             reset_storage=True,
             frame_cache_dir=None,

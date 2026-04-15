@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _now_human() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -116,7 +116,7 @@ class AdminState:
         if not self.db_path.exists():
             raise FileNotFoundError(
                 f"database not found: {self.db_path}. "
-                "Run ui_review_server.py --reset-storage --init-only first."
+                "Run codes/application/ui_review_server.py --reset-storage --init-only first."
             )
         if not self.static_dir.exists():
             raise FileNotFoundError(f"admin static dir not found: {self.static_dir}")

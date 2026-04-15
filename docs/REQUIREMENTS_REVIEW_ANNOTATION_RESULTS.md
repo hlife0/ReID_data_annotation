@@ -22,14 +22,14 @@
 
 建议新增：
 
-1. 后端服务：`./codes/ui_review_result_server.py`
-2. 前端页面：`./codes/ui_review_result_web/`
+1. 后端服务：`./codes/application/ui_review_result_server.py`
+2. 前端页面：`./codes/application/ui_review_result_web/`
 
 默认端口：`10088`
 
 说明：
 
-1. 本需求文档是新需求规范，当前仓库尚未实现该复审服务。
+1. 当前仓库已经存在该复审服务实现入口，但它仍属于独立下游阶段，不是段模式主线入口。
 2. 该服务与原始标注服务（`10086`）是不同阶段的独立 UI，不应直接覆盖原功能。
 
 ---

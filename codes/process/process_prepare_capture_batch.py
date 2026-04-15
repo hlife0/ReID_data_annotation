@@ -7,7 +7,7 @@ import shutil
 from dataclasses import replace
 from pathlib import Path
 
-from prepare_capture_lib import (
+from process.prepare_capture_lib import (
     build_segment_session,
     build_device_summaries,
     build_frame_timestamps,
@@ -22,7 +22,7 @@ from prepare_capture_lib import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SOURCE_VIDEO = Path("/home/hrli/mid-run/data/video_raw/mp4/20260410_195433.mp4")
 DEFAULT_SOURCE_IMU_ROOT = Path(
     "/home/hrli/mid-run/data/imu_raw/inbox_from_fzliang/2026-04-10_from_fzliang_20260412_092814"
@@ -124,7 +124,7 @@ def main() -> None:
 
         offset_seconds = max(0.0, (session.start_ms - video_start_ms) / 1000.0)
         duration_seconds = max(0.001, (session.end_ms - session.start_ms) / 1000.0)
-        from prepare_capture_lib import clip_video_segment  # local import to keep CLI wiring simple
+        from process.prepare_capture_lib import clip_video_segment  # local import to keep CLI wiring simple
         clip_video_segment(source_video, out_video, offset_seconds, duration_seconds)
         write_frame_timestamps_csv(out_ts, frame_timestamps_ms, start_index, end_index)
         hardlink_or_copy(out_video, out_video_retimed)

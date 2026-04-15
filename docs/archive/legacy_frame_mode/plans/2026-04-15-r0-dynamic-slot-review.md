@@ -18,14 +18,14 @@
 - Modify: `codes/ui_review_web/index.html` — keep compact slot layout and generic copy.
 - Modify: `codes/ui_review_web/styles.css` — preserve large left canvas and compress the right editor for many slots.
 - Modify: `codes/ui_admin_web/app.js` — remove stale P1/P2-specific labels in the admin UI.
-- Create: `codes/test_ui_review_server.py` — backend regression tests for dynamic-slot assignment, submit, edit, and export behavior.
+- Create: `codes/test/test_ui_review_server.py` — backend regression tests for dynamic-slot assignment, submit, edit, and export behavior.
 
 ### Task 1: Add backend regression tests for dynamic-slot review state
 
 **Files:**
-- Create: `codes/test_ui_review_server.py`
+- Create: `codes/test/test_ui_review_server.py`
 - Modify: `codes/ui_review_server.py`
-- Test: `codes/test_ui_review_server.py`
+- Test: `codes/test/test_ui_review_server.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `.venv/bin/python codes/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test/test_ui_review_server.py`
 Expected: FAIL because the current review state still has dynamic-slot regressions or missing compatibility behavior.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -175,13 +175,13 @@ Implement only the backend changes needed to make the new regression test pass. 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `.venv/bin/python codes/test_ui_review_server.py`
+Run: `.venv/bin/python codes/test/test_ui_review_server.py`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codes/test_ui_review_server.py codes/ui_review_server.py
+git add codes/test/test_ui_review_server.py codes/ui_review_server.py
 git commit -m "Stabilize dynamic slot review state"
 ```
 
@@ -316,7 +316,7 @@ Adjust the review/admin server behavior only as needed so the formal batch retur
 
 Run:
 ```bash
-.venv/bin/python codes/test_ui_review_server.py
+.venv/bin/python codes/test/test_ui_review_server.py
 node --check codes/ui_review_web/app.js
 node --check codes/ui_admin_web/app.js
 curl -s http://127.0.0.1:10086/api/status
@@ -332,6 +332,6 @@ Expected:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codes/ui_review_server.py codes/ui_admin_server.py codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css codes/ui_admin_web/app.js codes/test_ui_review_server.py
+git add codes/ui_review_server.py codes/ui_admin_server.py codes/ui_review_web/app.js codes/ui_review_web/index.html codes/ui_review_web/styles.css codes/ui_admin_web/app.js codes/test/test_ui_review_server.py
 git commit -m "Verify dynamic slot review stack on formal batch"
 ```

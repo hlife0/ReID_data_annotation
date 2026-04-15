@@ -34,15 +34,15 @@
 ## 2. 当前实现入口
 
 - review 服务：
-  - `./codes/ui_review_server.py`
+  - `./codes/application/ui_review_server.py`
   - 默认端口 `10086`
 - admin 服务：
-  - `./codes/ui_admin_server.py`
+  - `./codes/application/ui_admin_server.py`
   - 默认端口 `10087`
 - review 前端：
-  - `./codes/ui_review_web/`
+  - `./codes/application/ui_review_web/`
 - admin 前端：
-  - `./codes/ui_admin_web/`
+  - `./codes/application/ui_admin_web/`
 
 ---
 
@@ -81,7 +81,7 @@
 - `next_frame`
 - `submit`
 
-所以旧的逐帧模式没有被删除。
+所以旧的逐帧模式没有被完全删除，但它现在只是兼容入口，不是当前主线。
 
 ### 4.2 当前推荐的 segment-mode
 
@@ -106,9 +106,9 @@
 
 1. 顶部工具栏
    - annotator id
-   - `下一问题点`
-   - `跳过当前帧`
-   - `提交并下一问题点`
+   - `下一段`
+   - `跳过当前段`
+   - `提交并下一段`
 2. 状态条
    - video
    - frame
@@ -192,16 +192,18 @@
 - annotated frames
 - total annotations
 - annotator counts
-- red / yellow / green span counts
-- `auto_pass_span_count`
-- `qa_sample_span_count`
+- `segment_count`
+- `stable_segment_count`
+- `non_simple_single_frame_count`
+- `max_stable_segment_length`
 - annotator overview
 - recent annotations
 - frame detail query
 
-所以 admin 现在不只是“谁标了多少帧”，也是：
+所以 admin 现在不只是“谁标了多少帧”，也承担：
 
-- 风险分层监控入口
+- 段统计查看
+- 标注进度查看
 
 ---
 
@@ -221,7 +223,7 @@
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/ui_review_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10086
@@ -231,7 +233,7 @@ PYTHONPATH=codes .venv/bin/python codes/ui_review_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/ui_admin_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10087
@@ -241,7 +243,7 @@ PYTHONPATH=codes .venv/bin/python codes/ui_admin_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process_segment_review_prep.py \
+PYTHONPATH=codes .venv/bin/python codes/process/process_segment_review_prep.py \
   --batch-dir ./annotation/batch_20260413_v01
 ```
 
@@ -253,4 +255,5 @@ PYTHONPATH=codes .venv/bin/python codes/process_segment_review_prep.py \
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 - [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+- [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)

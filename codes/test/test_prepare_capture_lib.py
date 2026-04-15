@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from prepare_capture_lib import (
+from process.prepare_capture_lib import (
     active_devices_for_window,
     build_frame_timestamps,
     build_segment_session,

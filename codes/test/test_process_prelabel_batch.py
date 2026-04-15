@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import process_prelabel_batch as mod
+from process import process_prelabel_batch as mod
 
 
 class StepA0InputInspectionTests(unittest.TestCase):

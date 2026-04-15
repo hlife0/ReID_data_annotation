@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import List
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 REQUIRED_COLUMNS = [
     "video_stem",

@@ -14,7 +14,7 @@ from typing import Dict, Iterable, List, Tuple
 
 import cv2
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 TARGET_VIDEO_STEMS = [
     "20260211_171423",

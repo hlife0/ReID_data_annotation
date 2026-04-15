@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 
 import cv2
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def parse_args() -> argparse.Namespace:

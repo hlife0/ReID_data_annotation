@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 TARGET_VIDEO_STEMS = [
     "20260211_171423",
     "20260211_171724",

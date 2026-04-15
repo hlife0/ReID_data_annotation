@@ -33,6 +33,8 @@
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+- [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+- [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
 ### A 阶段 / 预标注
 
@@ -45,7 +47,6 @@
 
 ### 其他增强与下游
 
-- [REQUIREMENTS_TRACK_RECOMMENDATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_TRACK_RECOMMENDATION.md)
 - [REQUIREMENTS_ANNOTATION_ANALYSIS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md)
 - [REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md)
 - [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)
@@ -55,9 +56,15 @@
 ## 当前最需要记住的事实
 
 1. 当前统一代码目录是 `./codes/`
-2. 当前正式 batch 是 `./annotation/batch_20260413_v01`
-3. 当前默认 review 工作单位是“标注段”，不是单帧
-4. 当前 review 重点是：
+2. 当前活跃代码继续分成：
+   - `codes/application/`
+   - `codes/process/`
+   - `codes/test/`
+3. 当前离线处理顺序见：
+   - [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
+4. 当前正式 batch 是 `./annotation/batch_20260413_v01`
+5. 当前默认 review 工作单位是“标注段”，不是单帧
+6. 当前 review 重点是：
    - 稳定段
    - 单帧非简单帧
    - 代表帧标注
