@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from collections import Counter, OrderedDict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -122,6 +122,11 @@ class SegmentRecord:
     representative_frame: int
     track_ids: List[int]
     frame_count: int
+    anchor_candidates: List[int] = field(default_factory=list)
+    repairability_score: float = 0.0
+    fragmentation_score: int = 0
+    expected_gain: int = 0
+    trigger_reason: str = ""
 
 
 class RunLogger:
@@ -343,6 +348,7 @@ class AnnotationState:
             if segment is None:
                 raise ValueError("segment not found")
 
+            fallback: Dict[str, Any] | None = None
             if segment.segment_type == "stable_segment":
                 slots = self._validate_slots_payload(payload.get("slots"))
                 resolved_slots = self._resolve_stable_segment_slots(
@@ -368,8 +374,33 @@ class AnnotationState:
                 if int(record["frame_index"]) != segment.representative_frame:
                     raise ValueError("non-simple segment submission must target representative frame")
                 frame_records = [record]
+            elif segment.segment_type == "repair_window":
+                anchors = self._validate_repair_window_anchor_payload(segment, payload)
+                slots_by_frame, fallback = self._build_repair_window_slots_by_frame(segment, anchors)
+                if fallback is None and slots_by_frame is not None:
+                    frame_records = self._build_segment_frame_records(
+                        annotator_id=annotator_id,
+                        segment=segment,
+                        slots_by_frame=slots_by_frame,
+                    )
+                else:
+                    frame_records = []
             else:
                 raise ValueError(f"unsupported segment type: {segment.segment_type}")
+
+            if fallback is not None:
+                return {
+                    "submitted": {
+                        "segment_id": segment.segment_id,
+                        "video_stem": segment.video_stem,
+                        "start_frame": segment.start_frame,
+                        "end_frame": segment.end_frame,
+                        "representative_frame": segment.representative_frame,
+                    },
+                    "submitted_frame_count": 0,
+                    "fallback": fallback,
+                    "next_segment": self._segment_payload(segment),
+                }
 
             conn = self._connect()
             try:
@@ -1184,6 +1215,11 @@ class AnnotationState:
                             representative_frame=int(item["representative_frame"]),
                             track_ids=[int(v) for v in item.get("track_ids", [])],
                             frame_count=int(item["frame_count"]),
+                            anchor_candidates=[int(v) for v in item.get("anchor_candidates", [])],
+                            repairability_score=float(item.get("repairability_score", 0.0) or 0.0),
+                            fragmentation_score=int(item.get("fragmentation_score", 0) or 0),
+                            expected_gain=int(item.get("expected_gain", 0) or 0),
+                            trigger_reason=str(item.get("trigger_reason", "") or ""),
                         )
                     )
                 except Exception:
@@ -1575,6 +1611,185 @@ class AnnotationState:
                 result.append(self._expand_single_slot(end_item, video_stem, frame_index))
         return result
 
+    def _validate_repair_window_anchor_payload(
+        self,
+        segment: SegmentRecord,
+        payload: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        anchors = payload.get("anchor_annotations")
+        if not isinstance(anchors, list) or not anchors:
+            raise ValueError("repair_window anchor_annotations are required")
+        required_frames = segment.anchor_candidates or [segment.start_frame, segment.end_frame]
+        provided: Dict[int, Dict[str, Any]] = {}
+        for item in anchors:
+            if not isinstance(item, dict):
+                raise ValueError("repair_window anchors must be objects")
+            frame_index = int(item.get("frame_index", 0))
+            key = (segment.video_stem, frame_index)
+            if frame_index not in required_frames:
+                raise ValueError(f"unexpected repair_window anchor frame: {frame_index}")
+            if frame_index in provided:
+                raise ValueError(f"duplicate repair_window anchor frame: {frame_index}")
+            if key not in self.frame_lookup:
+                raise ValueError("invalid video_stem or frame_index")
+            timestamp_ms = float(item.get("timestamp_ms", 0.0))
+            expected_ts = self.frame_lookup[key].timestamp_ms
+            if abs(expected_ts - timestamp_ms) > 1.0:
+                raise ValueError("timestamp does not match frame pool mapping")
+            provided[frame_index] = {
+                "frame_index": frame_index,
+                "timestamp_ms": _safe_float(timestamp_ms),
+                "slots": self._validate_slots_payload(item.get("slots")),
+            }
+        missing = [frame for frame in required_frames if frame not in provided]
+        if missing:
+            raise ValueError(f"repair_window missing anchor annotations: {missing}")
+        return [provided[frame] for frame in sorted(provided)]
+
+    def _frame_ai_lookup(self, video_stem: str, frame_index: int) -> Dict[str, Dict[str, Any]]:
+        return {
+            str(int(float(box["track_id"]))): box
+            for box in self.ai_boxes.get((video_stem, frame_index), [])
+        }
+
+    def _strict_ai_slot_for_frame(
+        self,
+        slot_name: str,
+        video_stem: str,
+        frame_index: int,
+        track_id: str,
+    ) -> Tuple[Dict[str, Any] | None, Dict[str, Any] | None]:
+        ai_by_track = self._frame_ai_lookup(video_stem, frame_index)
+        target = ai_by_track.get(track_id)
+        if target is None:
+            return None, {
+                "reason": "missing_ai_track",
+                "missing_frames": [frame_index],
+                "slot": slot_name,
+                "ai_track_id": track_id,
+            }
+        return (
+            {
+                "slot": slot_name,
+                "bbox_x": _safe_float(target["bbox_x"]),
+                "bbox_y": _safe_float(target["bbox_y"]),
+                "bbox_w": _safe_float(target["bbox_w"]),
+                "bbox_h": _safe_float(target["bbox_h"]),
+                "source": "ai",
+                "ai_track_id": track_id,
+            },
+            None,
+        )
+
+    def _repair_window_slot_between_anchors(
+        self,
+        video_stem: str,
+        frame_index: int,
+        start_frame: int,
+        end_frame: int,
+        start_item: Dict[str, Any],
+        end_item: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any] | None, Dict[str, Any] | None]:
+        slot_name = str(start_item.get("slot", "")).strip().lower()
+        start_source = str(start_item.get("source", "") or "absent").strip()
+        end_source = str(end_item.get("source", "") or "absent").strip()
+        if start_source == "not_set":
+            start_source = "absent"
+        if end_source == "not_set":
+            end_source = "absent"
+
+        if start_source == "absent" and end_source == "absent":
+            return empty_slot_record(slot_name) | {"slot": slot_name, "source": "absent"}, None
+
+        start_track = str(start_item.get("ai_track_id", "") or "").strip()
+        end_track = str(end_item.get("ai_track_id", "") or "").strip()
+        if start_source == "ai" and end_source == "ai" and start_track and start_track == end_track:
+            return self._strict_ai_slot_for_frame(slot_name, video_stem, frame_index, start_track)
+
+        if start_source in {"manual_draw", "manual_param"} and end_source in {"manual_draw", "manual_param"}:
+            span = max(1, end_frame - start_frame)
+            t = 0.0 if span == 0 else (frame_index - start_frame) / span
+            return (
+                {
+                    "slot": slot_name,
+                    "bbox_x": _safe_float((1 - t) * float(start_item.get("bbox_x", 0.0)) + t * float(end_item.get("bbox_x", 0.0))),
+                    "bbox_y": _safe_float((1 - t) * float(start_item.get("bbox_y", 0.0)) + t * float(end_item.get("bbox_y", 0.0))),
+                    "bbox_w": _safe_float((1 - t) * float(start_item.get("bbox_w", 0.0)) + t * float(end_item.get("bbox_w", 0.0))),
+                    "bbox_h": _safe_float((1 - t) * float(start_item.get("bbox_h", 0.0)) + t * float(end_item.get("bbox_h", 0.0))),
+                    "source": "manual_param",
+                    "ai_track_id": start_track if start_track and start_track == end_track else "",
+                },
+                None,
+            )
+
+        midpoint = (start_frame + end_frame) / 2.0
+        chosen = start_item if frame_index <= midpoint else end_item
+        chosen_source = str(chosen.get("source", "") or "absent").strip()
+        if chosen_source == "not_set":
+            chosen_source = "absent"
+        if chosen_source in {"absent", "occluded", "outside"}:
+            return empty_slot_record(slot_name) | {"slot": slot_name, "source": chosen_source}, None
+        chosen_track = str(chosen.get("ai_track_id", "") or "").strip()
+        if chosen_source == "ai" and chosen_track:
+            return self._strict_ai_slot_for_frame(slot_name, video_stem, frame_index, chosen_track)
+        return (
+            {
+                "slot": slot_name,
+                "bbox_x": _safe_float(chosen.get("bbox_x", 0.0)),
+                "bbox_y": _safe_float(chosen.get("bbox_y", 0.0)),
+                "bbox_w": _safe_float(chosen.get("bbox_w", 0.0)),
+                "bbox_h": _safe_float(chosen.get("bbox_h", 0.0)),
+                "source": chosen_source,
+                "ai_track_id": chosen_track,
+            },
+            None,
+        )
+
+    def _build_repair_window_slots_by_frame(
+        self,
+        segment: SegmentRecord,
+        anchors: List[Dict[str, Any]],
+    ) -> Tuple[Dict[int, List[Dict[str, Any]]] | None, Dict[str, Any] | None]:
+        slots_by_frame: Dict[int, List[Dict[str, Any]]] = {
+            int(anchor["frame_index"]): anchor["slots"]
+            for anchor in anchors
+        }
+        sorted_anchors = sorted(anchors, key=lambda item: int(item["frame_index"]))
+        for idx in range(len(sorted_anchors) - 1):
+            start_anchor = sorted_anchors[idx]
+            end_anchor = sorted_anchors[idx + 1]
+            start_frame = int(start_anchor["frame_index"])
+            end_frame = int(end_anchor["frame_index"])
+            start_map = {str(item.get("slot", "")).strip().lower(): item for item in start_anchor["slots"]}
+            end_map = {str(item.get("slot", "")).strip().lower(): item for item in end_anchor["slots"]}
+            for frame_index in range(start_frame, end_frame + 1):
+                if frame_index in slots_by_frame:
+                    continue
+                frame_slots: List[Dict[str, Any]] = []
+                for slot_name in SLOT_NAMES:
+                    start_item = start_map.get(slot_name, empty_slot_record(slot_name))
+                    end_item = end_map.get(slot_name, empty_slot_record(slot_name))
+                    slot_payload, fallback = self._repair_window_slot_between_anchors(
+                        segment.video_stem,
+                        frame_index,
+                        start_frame,
+                        end_frame,
+                        start_item,
+                        end_item,
+                    )
+                    if fallback is not None:
+                        return None, fallback
+                    assert slot_payload is not None
+                    frame_slots.append(slot_payload)
+                slots_by_frame[frame_index] = frame_slots
+        for frame_index in range(segment.start_frame, segment.end_frame + 1):
+            if frame_index not in slots_by_frame:
+                return None, {
+                    "reason": "incomplete_fill",
+                    "missing_frames": [frame_index],
+                }
+        return slots_by_frame, None
+
     def _resolved_segment_ids(self, conn: sqlite3.Connection | None = None) -> set[str]:
         own_conn = conn is None
         if conn is None:
@@ -1680,36 +1895,70 @@ class AnnotationState:
         }
 
     def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
-        annotation_count = self._annotation_count_for_frame(segment.video_stem, segment.representative_frame)
-        recommendations: List[Dict[str, Any]] = []
-        conn = self._connect()
-        try:
-            recommendations = self._build_recommendations(
-                conn=conn,
-                video_stem=segment.video_stem,
-                ai_boxes=self.ai_boxes.get((segment.video_stem, segment.representative_frame), []),
+        repair_payload: Dict[str, Any] | None = None
+        if segment.segment_type == "repair_window":
+            anchor_frames = segment.anchor_candidates or [segment.start_frame, segment.end_frame]
+            anchor_payloads = [
+                self._build_frame_payload(
+                    segment.video_stem,
+                    frame_index,
+                    self._annotation_count_for_frame(segment.video_stem, frame_index),
+                    recommendations=[],
+                )
+                for frame_index in anchor_frames
+            ]
+            frame = anchor_payloads[0]
+            repair_payload = {
+                "anchor_frames": anchor_frames,
+                "anchor_count": len(anchor_frames),
+                "current_anchor_index": 0,
+                "anchors": anchor_payloads,
+            }
+        else:
+            annotation_count = self._annotation_count_for_frame(segment.video_stem, segment.representative_frame)
+            recommendations: List[Dict[str, Any]] = []
+            conn = self._connect()
+            try:
+                recommendations = self._build_recommendations(
+                    conn=conn,
+                    video_stem=segment.video_stem,
+                    ai_boxes=self.ai_boxes.get((segment.video_stem, segment.representative_frame), []),
+                )
+            finally:
+                conn.close()
+            frame = self._build_frame_payload(
+                segment.video_stem,
+                segment.representative_frame,
+                annotation_count,
+                recommendations=recommendations,
             )
-        finally:
-            conn.close()
-        frame = self._build_frame_payload(
-            segment.video_stem,
-            segment.representative_frame,
-            annotation_count,
-            recommendations=recommendations,
-        )
-        return {
-            "segment": {
-                "segment_id": segment.segment_id,
-                "video_stem": segment.video_stem,
-                "segment_type": segment.segment_type,
-                "start_frame": segment.start_frame,
-                "end_frame": segment.end_frame,
-                "representative_frame": segment.representative_frame,
-                "track_ids": segment.track_ids,
-                "frame_count": segment.frame_count,
-            },
+        segment_payload = {
+            "segment_id": segment.segment_id,
+            "video_stem": segment.video_stem,
+            "segment_type": segment.segment_type,
+            "start_frame": segment.start_frame,
+            "end_frame": segment.end_frame,
+            "representative_frame": segment.representative_frame,
+            "track_ids": segment.track_ids,
+            "frame_count": segment.frame_count,
+        }
+        if segment.segment_type == "repair_window":
+            segment_payload.update(
+                {
+                    "anchor_candidates": segment.anchor_candidates,
+                    "repairability_score": segment.repairability_score,
+                    "fragmentation_score": segment.fragmentation_score,
+                    "expected_gain": segment.expected_gain,
+                    "trigger_reason": segment.trigger_reason,
+                }
+            )
+        payload = {
+            "segment": segment_payload,
             "frame": frame,
         }
+        if repair_payload is not None:
+            payload["repair_window"] = repair_payload
+        return payload
 
     def _init_review_files(self) -> None:
         for stem in self.video_stems:
