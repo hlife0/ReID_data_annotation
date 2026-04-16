@@ -4,8 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,6 +13,9 @@ from process import segment_prep_common as common
 
 DEFAULT_LOW_SCORE_THRESHOLD = 0.6
 DEFAULT_HIGH_OVERLAP_IOU = 0.25
+DEFAULT_MAX_REPAIR_WINDOW_FRAMES = 10
+DEFAULT_MIN_REPAIRABILITY_SCORE = 0.70
+DEFAULT_MIN_FRAGMENTATION_SCORE = 6
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,11 @@ class SegmentRecord:
     representative_frame: int
     track_ids: List[int]
     frame_count: int
+    anchor_candidates: List[int] = field(default_factory=list)
+    repairability_score: float = 0.0
+    fragmentation_score: int = 0
+    expected_gain: int = 0
+    trigger_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -34,6 +41,25 @@ class FrameClassification:
     track_ids: tuple[int, ...]
     raw_simple: bool
     bad_reason: str
+
+
+@dataclass(frozen=True)
+class RepairWindowCandidate:
+    start_segment_index: int
+    end_segment_index: int
+    start_frame: int
+    end_frame: int
+    frame_count: int
+    track_ids: List[int]
+    anchor_candidates: List[int]
+    repairability_score: float
+    fragmentation_score: int
+    expected_gain: int
+    trigger_reason: str
+
+    @property
+    def priority_score(self) -> float:
+        return round(self.repairability_score * float(self.expected_gain), 6)
 
 
 def load_frame_timestamps(csv_path: Path) -> Dict[int, float]:
@@ -47,20 +73,6 @@ def load_frame_timestamps(csv_path: Path) -> Dict[int, float]:
             except Exception:
                 continue
     return dict(sorted(rows.items()))
-
-
-def is_simple_frame(
-    items: List[common.Detection],
-    low_score_threshold: float,
-    high_overlap_iou: float,
-) -> bool:
-    if any(item.score < low_score_threshold for item in items):
-        return False
-    for idx, det_a in enumerate(items):
-        for det_b in items[idx + 1 :]:
-            if common.iou_xywh(det_a, det_b) > high_overlap_iou:
-                return False
-    return True
 
 
 def classify_frame(
@@ -139,33 +151,239 @@ def representative_frame(start_frame: int, end_frame: int) -> int:
     return (start_frame + end_frame) // 2
 
 
-def build_segments(
-    task: common.TaskInfo,
-    detections: List[common.Detection],
-    low_score_threshold: float,
-    high_overlap_iou: float,
-    bridge_low_score_gaps: bool,
-    max_gap_frames: int,
-) -> Dict[str, Any]:
-    timestamps = load_frame_timestamps(Path(task.timestamp_path))
-    by_frame = common.group_by_frame(detections)
-    frame_indices = list(timestamps)
-    segments: List[SegmentRecord] = []
-    frame_states = [
-        classify_frame(
-            frame_index,
-            by_frame.get(frame_index, []),
-            low_score_threshold=low_score_threshold,
-            high_overlap_iou=high_overlap_iou,
-        )
-        for frame_index in frame_indices
-    ]
-    simple_flags = bridge_simple_flags(
+def _track_jaccard(left: tuple[int, ...], right: tuple[int, ...]) -> float:
+    left_set = set(left)
+    right_set = set(right)
+    if not left_set and not right_set:
+        return 1.0
+    union = left_set | right_set
+    if not union:
+        return 1.0
+    return len(left_set & right_set) / len(union)
+
+
+def _frame_track_lookup(by_frame: Dict[int, List[common.Detection]]) -> Dict[int, Dict[int, common.Detection]]:
+    lookup: Dict[int, Dict[int, common.Detection]] = {}
+    for frame_index, detections in by_frame.items():
+        lookup[frame_index] = {det.track_id: det for det in detections}
+    return lookup
+
+
+def _mean_same_track_iou(
+    frame_states: List[FrameClassification],
+    frame_track_lookup: Dict[int, Dict[int, common.Detection]],
+) -> float:
+    overlaps: List[float] = []
+    for idx in range(len(frame_states) - 1):
+        left = frame_states[idx]
+        right = frame_states[idx + 1]
+        left_tracks = frame_track_lookup.get(left.frame_index, {})
+        right_tracks = frame_track_lookup.get(right.frame_index, {})
+        common_tracks = sorted(set(left_tracks) & set(right_tracks))
+        for track_id in common_tracks:
+            overlaps.append(common.iou_xywh(left_tracks[track_id], right_tracks[track_id]))
+    if not overlaps:
+        return 0.0
+    return round(sum(overlaps) / len(overlaps), 6)
+
+
+def _has_hard_break(frame_states: List[FrameClassification]) -> bool:
+    both_run = 0
+    overlap_run = 0
+    for idx, frame in enumerate(frame_states):
+        if frame.bad_reason == "both":
+            both_run += 1
+        else:
+            both_run = 0
+        if frame.bad_reason == "overlap_only":
+            overlap_run += 1
+        else:
+            overlap_run = 0
+        if both_run >= 2 or overlap_run >= 3:
+            return True
+        if idx == 0:
+            continue
+        prev = frame_states[idx - 1]
+        prev_tracks = set(prev.track_ids)
+        cur_tracks = set(frame.track_ids)
+        disappeared = prev_tracks - cur_tracks
+        appeared = cur_tracks - prev_tracks
+        if len(disappeared) > 1 or len(appeared) > 1:
+            return True
+        if abs(len(prev_tracks) - len(cur_tracks)) > 1:
+            return True
+    return False
+
+
+def _fragmentation_score(segments: List[SegmentRecord]) -> int:
+    non_simple_count = sum(1 for segment in segments if segment.segment_type == "non_simple_single_frame")
+    micro_stable_count = sum(
+        1 for segment in segments if segment.segment_type == "stable_segment" and segment.frame_count <= 3
+    )
+    boundary_count = max(0, len(segments) - 1)
+    return 2 * non_simple_count + micro_stable_count + boundary_count
+
+
+def _select_anchor_candidates(frame_states: List[FrameClassification]) -> List[int]:
+    start_frame = frame_states[0].frame_index
+    end_frame = frame_states[-1].frame_index
+    frame_count = end_frame - start_frame + 1
+    if frame_count <= 4:
+        return sorted({start_frame, end_frame})
+
+    midpoint = (start_frame + end_frame) / 2.0
+    severity_rank = {"both": 3, "overlap_only": 2, "low_only": 1, "simple": 0}
+    worst_frame = max(
         frame_states,
-        bridge_low_score_gaps=bridge_low_score_gaps,
-        max_gap_frames=max_gap_frames,
+        key=lambda frame: (severity_rank.get(frame.bad_reason, 0), -abs(frame.frame_index - midpoint)),
+    )
+    if severity_rank.get(worst_frame.bad_reason, 0) == 0:
+        worst_index = representative_frame(start_frame, end_frame)
+    else:
+        worst_index = worst_frame.frame_index
+    return sorted({start_frame, worst_index, end_frame})
+
+
+def _evaluate_repair_window_candidate(
+    segments: List[SegmentRecord],
+    frame_states: List[FrameClassification],
+    simple_flags: Dict[int, bool],
+    frame_track_lookup: Dict[int, Dict[int, common.Detection]],
+) -> RepairWindowCandidate | None:
+    if len(segments) < 3:
+        return None
+    start_frame = segments[0].start_frame
+    end_frame = segments[-1].end_frame
+    frame_count = end_frame - start_frame + 1
+    if frame_count > DEFAULT_MAX_REPAIR_WINDOW_FRAMES:
+        return None
+
+    window_states = [frame for frame in frame_states if start_frame <= frame.frame_index <= end_frame]
+    if len(window_states) < 2:
+        return None
+    if _has_hard_break(window_states):
+        return None
+
+    endpoint_track_jaccard = _track_jaccard(window_states[0].track_ids, window_states[-1].track_ids)
+    adjacent_jaccards = [
+        _track_jaccard(window_states[idx].track_ids, window_states[idx + 1].track_ids)
+        for idx in range(len(window_states) - 1)
+    ]
+    if not adjacent_jaccards:
+        return None
+    adjacent_good_ratio = sum(1 for value in adjacent_jaccards if value >= 0.6) / len(adjacent_jaccards)
+    mean_adjacent_track_jaccard = sum(adjacent_jaccards) / len(adjacent_jaccards)
+    mean_same_track_iou = _mean_same_track_iou(window_states, frame_track_lookup)
+    clean_frame_ratio = sum(1 for frame in window_states if simple_flags.get(frame.frame_index, False)) / len(window_states)
+
+    if endpoint_track_jaccard < 0.6:
+        return None
+    if adjacent_good_ratio < 0.7:
+        return None
+    if mean_same_track_iou < 0.35:
+        return None
+
+    fragmentation_score = _fragmentation_score(segments)
+    if fragmentation_score < DEFAULT_MIN_FRAGMENTATION_SCORE:
+        return None
+
+    repairability_score = round(
+        0.35 * endpoint_track_jaccard
+        + 0.35 * mean_adjacent_track_jaccard
+        + 0.20 * mean_same_track_iou
+        + 0.10 * clean_frame_ratio,
+        6,
+    )
+    if repairability_score < DEFAULT_MIN_REPAIRABILITY_SCORE:
+        return None
+
+    anchor_candidates = _select_anchor_candidates(window_states)
+    expected_gain = len(segments) - len(anchor_candidates)
+    if expected_gain < 2:
+        return None
+
+    return RepairWindowCandidate(
+        start_segment_index=-1,
+        end_segment_index=-1,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        frame_count=frame_count,
+        track_ids=list(window_states[0].track_ids),
+        anchor_candidates=anchor_candidates,
+        repairability_score=repairability_score,
+        fragmentation_score=fragmentation_score,
+        expected_gain=expected_gain,
+        trigger_reason="fragment_cluster",
     )
 
+
+def _is_small_fragment(segment: SegmentRecord) -> bool:
+    return segment.segment_type == "non_simple_single_frame" or (
+        segment.segment_type == "stable_segment" and segment.frame_count <= 3
+    )
+
+
+def _select_repair_windows(
+    segments: List[SegmentRecord],
+    frame_states: List[FrameClassification],
+    simple_flags: Dict[int, bool],
+    frame_track_lookup: Dict[int, Dict[int, common.Detection]],
+) -> List[RepairWindowCandidate]:
+    candidates: List[RepairWindowCandidate] = []
+    for start_idx in range(len(segments)):
+        if not _is_small_fragment(segments[start_idx]):
+            continue
+        for end_idx in range(start_idx + 2, len(segments)):
+            window_segments = segments[start_idx : end_idx + 1]
+            if not all(_is_small_fragment(item) for item in window_segments):
+                break
+            window_frame_count = window_segments[-1].end_frame - window_segments[0].start_frame + 1
+            if window_frame_count > DEFAULT_MAX_REPAIR_WINDOW_FRAMES:
+                break
+            candidate = _evaluate_repair_window_candidate(
+                window_segments,
+                frame_states,
+                simple_flags,
+                frame_track_lookup,
+            )
+            if candidate is None:
+                continue
+            candidates.append(
+                RepairWindowCandidate(
+                    start_segment_index=start_idx,
+                    end_segment_index=end_idx,
+                    start_frame=candidate.start_frame,
+                    end_frame=candidate.end_frame,
+                    frame_count=candidate.frame_count,
+                    track_ids=candidate.track_ids,
+                    anchor_candidates=candidate.anchor_candidates,
+                    repairability_score=candidate.repairability_score,
+                    fragmentation_score=candidate.fragmentation_score,
+                    expected_gain=candidate.expected_gain,
+                    trigger_reason=candidate.trigger_reason,
+                )
+            )
+
+    selected: List[RepairWindowCandidate] = []
+    occupied_frames: set[int] = set()
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (-item.priority_score, item.start_frame, item.end_frame),
+    ):
+        frame_span = set(range(candidate.start_frame, candidate.end_frame + 1))
+        if occupied_frames & frame_span:
+            continue
+        selected.append(candidate)
+        occupied_frames.update(frame_span)
+    return sorted(selected, key=lambda item: (item.start_frame, item.end_frame))
+
+
+def _first_pass_segments(
+    task: common.TaskInfo,
+    frame_states: List[FrameClassification],
+    simple_flags: Dict[int, bool],
+) -> List[SegmentRecord]:
+    segments: List[SegmentRecord] = []
     current_start: int | None = None
     current_track_ids: List[int] | None = None
 
@@ -222,9 +440,84 @@ def build_segments(
             )
         )
 
-    flush_current(frame_indices[-1] if frame_indices else None)
+    flush_current(frame_states[-1].frame_index if frame_states else None)
+    return sorted(segments, key=lambda item: (item.start_frame, item.end_frame, item.segment_type))
 
-    ordered = sorted(segments, key=lambda item: (item.start_frame, item.end_frame, item.segment_type))
+
+def _merge_repair_windows(
+    task: common.TaskInfo,
+    segments: List[SegmentRecord],
+    selected_candidates: List[RepairWindowCandidate],
+) -> List[SegmentRecord]:
+    if not selected_candidates:
+        return segments
+
+    final_segments: List[SegmentRecord] = []
+    idx = 0
+    for candidate in selected_candidates:
+        while idx < candidate.start_segment_index:
+            final_segments.append(segments[idx])
+            idx += 1
+        final_segments.append(
+            SegmentRecord(
+                segment_id="",
+                video_stem=task.video_stem,
+                segment_type="repair_window",
+                start_frame=candidate.start_frame,
+                end_frame=candidate.end_frame,
+                representative_frame=candidate.anchor_candidates[0],
+                track_ids=candidate.track_ids,
+                frame_count=candidate.frame_count,
+                anchor_candidates=candidate.anchor_candidates,
+                repairability_score=candidate.repairability_score,
+                fragmentation_score=candidate.fragmentation_score,
+                expected_gain=candidate.expected_gain,
+                trigger_reason=candidate.trigger_reason,
+            )
+        )
+        idx = candidate.end_segment_index + 1
+    while idx < len(segments):
+        final_segments.append(segments[idx])
+        idx += 1
+    return sorted(final_segments, key=lambda item: (item.start_frame, item.end_frame, item.segment_type))
+
+
+def build_segments(
+    task: common.TaskInfo,
+    detections: List[common.Detection],
+    low_score_threshold: float,
+    high_overlap_iou: float,
+    bridge_low_score_gaps: bool,
+    max_gap_frames: int,
+) -> Dict[str, Any]:
+    timestamps = load_frame_timestamps(Path(task.timestamp_path))
+    by_frame = common.group_by_frame(detections)
+    frame_indices = list(timestamps)
+    frame_states = [
+        classify_frame(
+            frame_index,
+            by_frame.get(frame_index, []),
+            low_score_threshold=low_score_threshold,
+            high_overlap_iou=high_overlap_iou,
+        )
+        for frame_index in frame_indices
+    ]
+    simple_flags = bridge_simple_flags(
+        frame_states,
+        bridge_low_score_gaps=bridge_low_score_gaps,
+        max_gap_frames=max_gap_frames,
+    )
+
+    first_pass_segments = _first_pass_segments(task, frame_states, simple_flags)
+    frame_track_lookup = _frame_track_lookup(by_frame)
+    repair_candidates = _select_repair_windows(
+        first_pass_segments,
+        frame_states,
+        simple_flags,
+        frame_track_lookup,
+    )
+    ordered = _merge_repair_windows(task, first_pass_segments, repair_candidates)
+
     exported_segments: List[Dict[str, Any]] = []
     frame_to_segment: Dict[str, str] = {}
     for idx, segment in enumerate(ordered, start=1):
@@ -239,11 +532,22 @@ def build_segments(
             "track_ids": segment.track_ids,
             "frame_count": segment.frame_count,
         }
+        if segment.segment_type == "repair_window":
+            exported.update(
+                {
+                    "anchor_candidates": segment.anchor_candidates,
+                    "repairability_score": segment.repairability_score,
+                    "fragmentation_score": segment.fragmentation_score,
+                    "expected_gain": segment.expected_gain,
+                    "trigger_reason": segment.trigger_reason,
+                }
+            )
         exported_segments.append(exported)
         for frame_index in range(segment.start_frame, segment.end_frame + 1):
             frame_to_segment[str(frame_index)] = segment_id
 
     stable_lengths = [item["frame_count"] for item in exported_segments if item["segment_type"] == "stable_segment"]
+    repair_window_count = sum(1 for item in exported_segments if item["segment_type"] == "repair_window")
     return {
         "video_stem": task.video_stem,
         "segments": exported_segments,
@@ -257,6 +561,7 @@ def build_segments(
             "non_simple_single_frame_count": sum(
                 1 for item in exported_segments if item["segment_type"] == "non_simple_single_frame"
             ),
+            "repair_window_count": repair_window_count,
             "avg_stable_segment_length": round(sum(stable_lengths) / len(stable_lengths), 3) if stable_lengths else 0.0,
             "max_stable_segment_length": max(stable_lengths) if stable_lengths else 0,
         },
@@ -281,6 +586,7 @@ def run_segment_review_prep(
         "segment_count": 0,
         "stable_segment_count": 0,
         "non_simple_single_frame_count": 0,
+        "repair_window_count": 0,
         "avg_stable_segment_length": 0.0,
         "max_stable_segment_length": 0,
         "videos": [],
@@ -320,6 +626,7 @@ def run_segment_review_prep(
         summary["segment_count"] += int(payload["summary"]["segment_count"])
         summary["stable_segment_count"] += int(payload["summary"]["stable_segment_count"])
         summary["non_simple_single_frame_count"] += int(payload["summary"]["non_simple_single_frame_count"])
+        summary["repair_window_count"] += int(payload["summary"].get("repair_window_count", 0))
         summary["max_stable_segment_length"] = max(
             int(summary["max_stable_segment_length"]),
             int(payload["summary"]["max_stable_segment_length"]),
