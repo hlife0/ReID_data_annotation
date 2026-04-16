@@ -11,6 +11,8 @@
 当前正式批次是：
 
 - `./annotation/batch_20260413_v01`
+- 当前批次的段级压缩统计报告见：
+  - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
 
 ---
 
@@ -224,3 +226,4 @@ node --check codes/application/ui_admin_web/app.js
 - [REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md)
 - [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)
 - [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
+- [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)

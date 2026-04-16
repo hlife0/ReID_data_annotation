@@ -112,6 +112,29 @@ class SegmentReviewPrepTests(unittest.TestCase):
         self.assertEqual(batch_summary["stable_segment_count"], 3)
         self.assertEqual(batch_summary["non_simple_single_frame_count"], 1)
 
+    def test_segment_prep_accepts_custom_low_score_threshold(self) -> None:
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+        )
+        self.assertEqual(summary["video_count"], 1)
+
+        segment_dir = self.batch_dir / "segment_prep"
+        segments_payload = json.loads(
+            (segment_dir / "sample.segments.json").read_text(encoding="utf-8")
+        )
+
+        segments = segments_payload["segments"]
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [
+                ("stable_segment", 1, 4),
+                ("stable_segment", 5, 6),
+            ],
+        )
+        self.assertEqual(summary["stable_segment_count"], 2)
+        self.assertEqual(summary["non_simple_single_frame_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

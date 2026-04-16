@@ -12,8 +12,8 @@ from typing import Any, Dict, List
 from process import segment_prep_common as common
 
 
-LOW_SCORE_THRESHOLD = 0.6
-HIGH_OVERLAP_IOU = 0.25
+DEFAULT_LOW_SCORE_THRESHOLD = 0.6
+DEFAULT_HIGH_OVERLAP_IOU = 0.25
 
 
 @dataclass(frozen=True)
@@ -41,12 +41,16 @@ def load_frame_timestamps(csv_path: Path) -> Dict[int, float]:
     return dict(sorted(rows.items()))
 
 
-def is_simple_frame(items: List[common.Detection]) -> bool:
-    if any(item.score < LOW_SCORE_THRESHOLD for item in items):
+def is_simple_frame(
+    items: List[common.Detection],
+    low_score_threshold: float,
+    high_overlap_iou: float,
+) -> bool:
+    if any(item.score < low_score_threshold for item in items):
         return False
     for idx, det_a in enumerate(items):
         for det_b in items[idx + 1 :]:
-            if common.iou_xywh(det_a, det_b) > HIGH_OVERLAP_IOU:
+            if common.iou_xywh(det_a, det_b) > high_overlap_iou:
                 return False
     return True
 
@@ -55,7 +59,12 @@ def representative_frame(start_frame: int, end_frame: int) -> int:
     return (start_frame + end_frame) // 2
 
 
-def build_segments(task: common.TaskInfo, detections: List[common.Detection]) -> Dict[str, Any]:
+def build_segments(
+    task: common.TaskInfo,
+    detections: List[common.Detection],
+    low_score_threshold: float,
+    high_overlap_iou: float,
+) -> Dict[str, Any]:
     timestamps = load_frame_timestamps(Path(task.timestamp_path))
     by_frame = common.group_by_frame(detections)
     frame_indices = list(timestamps)
@@ -90,7 +99,11 @@ def build_segments(task: common.TaskInfo, detections: List[common.Detection]) ->
     for frame_index in frame_indices:
         items = by_frame.get(frame_index, [])
         track_ids = sorted(item.track_id for item in items)
-        simple = is_simple_frame(items)
+        simple = is_simple_frame(
+            items,
+            low_score_threshold=low_score_threshold,
+            high_overlap_iou=high_overlap_iou,
+        )
         if simple:
             if current_start is None:
                 current_start = frame_index
@@ -158,7 +171,11 @@ def build_segments(task: common.TaskInfo, detections: List[common.Detection]) ->
     }
 
 
-def run_segment_review_prep(batch_dir: Path) -> Dict[str, Any]:
+def run_segment_review_prep(
+    batch_dir: Path,
+    low_score_threshold: float = DEFAULT_LOW_SCORE_THRESHOLD,
+    high_overlap_iou: float = DEFAULT_HIGH_OVERLAP_IOU,
+) -> Dict[str, Any]:
     batch_dir = batch_dir.resolve()
     segment_prep_dir = batch_dir / "segment_prep"
     segment_prep_dir.mkdir(parents=True, exist_ok=True)
@@ -180,7 +197,12 @@ def run_segment_review_prep(batch_dir: Path) -> Dict[str, Any]:
         if not task.pseudo_label_path.exists():
             continue
         detections = common.load_detections(task.pseudo_label_path)
-        payload = build_segments(task, detections)
+        payload = build_segments(
+            task,
+            detections,
+            low_score_threshold=low_score_threshold,
+            high_overlap_iou=high_overlap_iou,
+        )
 
         (segment_prep_dir / f"{task.video_stem}.segments.json").write_text(
             json.dumps(
@@ -235,12 +257,28 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Batch directory, e.g. ./annotation/batch_20260413_v01",
     )
+    parser.add_argument(
+        "--low-score-threshold",
+        type=float,
+        default=DEFAULT_LOW_SCORE_THRESHOLD,
+        help=f"Frames with any box score below this are non-simple (default: {DEFAULT_LOW_SCORE_THRESHOLD})",
+    )
+    parser.add_argument(
+        "--high-overlap-iou",
+        type=float,
+        default=DEFAULT_HIGH_OVERLAP_IOU,
+        help=f"Frames with any pair IoU above this are non-simple (default: {DEFAULT_HIGH_OVERLAP_IOU})",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    summary = run_segment_review_prep(args.batch_dir)
+    summary = run_segment_review_prep(
+        args.batch_dir,
+        low_score_threshold=args.low_score_threshold,
+        high_overlap_iou=args.high_overlap_iou,
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
