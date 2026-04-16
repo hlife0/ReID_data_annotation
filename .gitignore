@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 .codex
+.worktrees/
 
 # Large data and generated artifacts
 data
