@@ -87,6 +87,12 @@ class SegmentReviewPrepTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def _write_timestamps(self, frame_count: int) -> None:
+        rows = ['frame_index,timestamp_ms\n']
+        for idx in range(1, frame_count + 1):
+            rows.append(f"{idx},{1000 + (idx - 1) * 33}\n")
+        self.timestamp_path.write_text(''.join(rows), encoding='utf-8')
+
     def _load_segments(self) -> list[dict[str, object]]:
         payload = json.loads(
             (self.batch_dir / "segment_prep" / "sample.segments.json").read_text(encoding="utf-8")
@@ -286,6 +292,89 @@ class SegmentReviewPrepTests(unittest.TestCase):
             ],
         )
         self.assertEqual(summary["non_simple_single_frame_count"], 1)
+
+    def test_segment_prep_emits_repair_window_for_short_repairable_fragment_cluster(self) -> None:
+        self._write_timestamps(8)
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.50\n",
+                "sample,2,1033,2,98,12,22,41,0.92\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,96,12,22,41,0.94\n",
+                "sample,4,1099,1,30,10,20,40,0.95\n",
+                "sample,4,1099,2,40,12,22,41,0.94\n",
+                "sample,5,1132,1,18,10,20,40,0.95\n",
+                "sample,5,1132,2,92,12,22,41,0.94\n",
+                "sample,6,1165,1,20,10,20,40,0.51\n",
+                "sample,6,1165,2,90,12,22,41,0.93\n",
+                "sample,7,1198,1,22,10,20,40,0.95\n",
+                "sample,7,1198,2,88,12,22,41,0.94\n",
+                "sample,8,1231,1,24,10,20,40,0.95\n",
+                "sample,8,1231,2,86,12,22,41,0.94\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.6,
+            bridge_low_score_gaps=False,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(summary["video_count"], 1)
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["segment_type"], "repair_window")
+        self.assertEqual((segments[0]["start_frame"], segments[0]["end_frame"]), (1, 8))
+        self.assertEqual(segments[0]["anchor_candidates"], [1, 4, 8])
+
+    def test_segment_prep_keeps_non_repairable_fragment_cluster_split(self) -> None:
+        self._write_timestamps(8)
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,30,10,20,40,0.95\n",
+                "sample,2,1033,2,40,12,22,41,0.94\n",
+                "sample,3,1066,1,32,10,20,40,0.95\n",
+                "sample,3,1066,2,42,12,22,41,0.94\n",
+                "sample,4,1099,1,34,10,20,40,0.95\n",
+                "sample,4,1099,2,44,12,22,41,0.94\n",
+                "sample,5,1132,1,18,10,20,40,0.95\n",
+                "sample,5,1132,2,92,12,22,41,0.94\n",
+                "sample,6,1165,1,20,10,20,40,0.50\n",
+                "sample,6,1165,2,90,12,22,41,0.93\n",
+                "sample,7,1198,1,22,10,20,40,0.95\n",
+                "sample,7,1198,2,88,12,22,41,0.94\n",
+                "sample,8,1231,1,24,10,20,40,0.95\n",
+                "sample,8,1231,2,86,12,22,41,0.94\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.6,
+            bridge_low_score_gaps=False,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(summary["video_count"], 1)
+        self.assertIn("repair_window_count", summary)
+        self.assertEqual(summary["repair_window_count"], 0)
+        self.assertNotIn("repair_window", [item["segment_type"] for item in segments])
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [
+                ("stable_segment", 1, 1),
+                ("non_simple_single_frame", 2, 2),
+                ("non_simple_single_frame", 3, 3),
+                ("non_simple_single_frame", 4, 4),
+                ("stable_segment", 5, 5),
+                ("non_simple_single_frame", 6, 6),
+                ("stable_segment", 7, 8),
+            ],
+        )
 
     def test_segment_prep_keeps_old_behavior_when_bridge_disabled(self) -> None:
         self._write_pseudo_rows(
