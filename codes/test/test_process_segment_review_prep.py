@@ -80,6 +80,19 @@ class SegmentReviewPrepTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmpdir.cleanup()
 
+    def _write_pseudo_rows(self, rows: list[str]) -> None:
+        self.pseudo_path.write_text(
+            "video_stem,frame_index,timestamp_ms,track_id,bbox_x,bbox_y,bbox_w,bbox_h,score\n"
+            + "".join(rows),
+            encoding="utf-8",
+        )
+
+    def _load_segments(self) -> list[dict[str, object]]:
+        payload = json.loads(
+            (self.batch_dir / "segment_prep" / "sample.segments.json").read_text(encoding="utf-8")
+        )
+        return payload["segments"]
+
     def test_segment_prep_splits_stable_segments_and_non_simple_single_frames(self) -> None:
         summary = mod.run_segment_review_prep(batch_dir=self.batch_dir)
         self.assertEqual(summary["video_count"], 1)
@@ -134,6 +147,179 @@ class SegmentReviewPrepTests(unittest.TestCase):
         )
         self.assertEqual(summary["stable_segment_count"], 2)
         self.assertEqual(summary["non_simple_single_frame_count"], 0)
+
+    def test_segment_prep_bridges_single_low_score_gap_when_enabled(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.96\n",
+                "sample,2,1033,2,98,12,22,41,0.95\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,96,12,22,41,0.39\n",
+                "sample,4,1100,1,16,10,20,40,0.96\n",
+                "sample,4,1100,2,94,12,22,41,0.96\n",
+                "sample,5,1133,1,18,10,20,40,0.95\n",
+                "sample,5,1133,2,92,12,22,41,0.95\n",
+                "sample,6,1166,1,20,10,20,40,0.95\n",
+                "sample,6,1166,2,90,12,22,41,0.95\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+            bridge_low_score_gaps=True,
+            max_gap_frames=1,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [("stable_segment", 1, 6)],
+        )
+        self.assertEqual(summary["stable_segment_count"], 1)
+        self.assertEqual(summary["non_simple_single_frame_count"], 0)
+
+    def test_segment_prep_bridges_two_frame_low_score_gap_when_enabled(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.96\n",
+                "sample,2,1033,2,98,12,22,41,0.95\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,96,12,22,41,0.39\n",
+                "sample,4,1100,1,16,10,20,40,0.96\n",
+                "sample,4,1100,2,94,12,22,41,0.39\n",
+                "sample,5,1133,1,18,10,20,40,0.95\n",
+                "sample,5,1133,2,92,12,22,41,0.95\n",
+                "sample,6,1166,1,20,10,20,40,0.95\n",
+                "sample,6,1166,2,90,12,22,41,0.95\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+            bridge_low_score_gaps=True,
+            max_gap_frames=2,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [("stable_segment", 1, 6)],
+        )
+        self.assertEqual(summary["stable_segment_count"], 1)
+        self.assertEqual(summary["non_simple_single_frame_count"], 0)
+
+    def test_segment_prep_does_not_bridge_overlap_only_gap(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.96\n",
+                "sample,2,1033,2,98,12,22,41,0.95\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,20,12,22,41,0.95\n",
+                "sample,4,1100,1,16,10,20,40,0.96\n",
+                "sample,4,1100,2,94,12,22,41,0.96\n",
+                "sample,5,1133,1,18,10,20,40,0.95\n",
+                "sample,5,1133,2,92,12,22,41,0.95\n",
+                "sample,6,1166,1,20,10,20,40,0.95\n",
+                "sample,6,1166,2,90,12,22,41,0.95\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+            bridge_low_score_gaps=True,
+            max_gap_frames=1,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [
+                ("stable_segment", 1, 2),
+                ("non_simple_single_frame", 3, 3),
+                ("stable_segment", 4, 6),
+            ],
+        )
+        self.assertEqual(summary["non_simple_single_frame_count"], 1)
+
+    def test_segment_prep_does_not_bridge_gap_when_track_set_changes(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.96\n",
+                "sample,2,1033,2,98,12,22,41,0.95\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,96,12,22,41,0.95\n",
+                "sample,3,1066,3,150,20,24,44,0.39\n",
+                "sample,4,1100,1,16,10,20,40,0.96\n",
+                "sample,4,1100,2,94,12,22,41,0.96\n",
+                "sample,5,1133,1,18,10,20,40,0.95\n",
+                "sample,5,1133,2,92,12,22,41,0.95\n",
+                "sample,6,1166,1,20,10,20,40,0.95\n",
+                "sample,6,1166,2,90,12,22,41,0.95\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+            bridge_low_score_gaps=True,
+            max_gap_frames=1,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [
+                ("stable_segment", 1, 2),
+                ("non_simple_single_frame", 3, 3),
+                ("stable_segment", 4, 6),
+            ],
+        )
+        self.assertEqual(summary["non_simple_single_frame_count"], 1)
+
+    def test_segment_prep_keeps_old_behavior_when_bridge_disabled(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,1,10,10,20,40,0.95\n",
+                "sample,1,1000,2,100,12,22,41,0.94\n",
+                "sample,2,1033,1,12,10,20,40,0.96\n",
+                "sample,2,1033,2,98,12,22,41,0.95\n",
+                "sample,3,1066,1,14,10,20,40,0.95\n",
+                "sample,3,1066,2,96,12,22,41,0.39\n",
+                "sample,4,1100,1,16,10,20,40,0.96\n",
+                "sample,4,1100,2,94,12,22,41,0.96\n",
+                "sample,5,1133,1,18,10,20,40,0.95\n",
+                "sample,5,1133,2,92,12,22,41,0.95\n",
+                "sample,6,1166,1,20,10,20,40,0.95\n",
+                "sample,6,1166,2,90,12,22,41,0.95\n",
+            ]
+        )
+
+        summary = mod.run_segment_review_prep(
+            batch_dir=self.batch_dir,
+            low_score_threshold=0.4,
+        )
+
+        segments = self._load_segments()
+        self.assertEqual(
+            [(item["segment_type"], item["start_frame"], item["end_frame"]) for item in segments],
+            [
+                ("stable_segment", 1, 2),
+                ("non_simple_single_frame", 3, 3),
+                ("stable_segment", 4, 6),
+            ],
+        )
+        self.assertEqual(summary["non_simple_single_frame_count"], 1)
 
 
 if __name__ == "__main__":
