@@ -1,21 +1,20 @@
-# Stable Segment Prefill Design
+# Segment Prefill Design
 
 ## Goal
 
-为当前段模式 review UI 增加一个“稳定段预填”能力：后端基于同一视频中的历史 `ai_track_id -> slot` 标注关系给出推荐，前端在稳定段打开时自动把对应 AI 框填进槽位，让标注员从“可修改的初稿”开始，而不是从空白开始。
+为当前段模式 review UI 增加一个“段级预填”能力：后端基于同一视频中的历史 `ai_track_id -> slot` 标注关系给出推荐，前端在任意 segment 打开时自动把对应 AI 框填进槽位，让标注员从“可修改的初稿”开始，而不是从空白开始。
 
 ## Scope
 
 本次只做：
 
-- `stable_segment` 的推荐生成
-- `stable_segment` 的自动预填
+- 任意 segment 的推荐生成
+- 任意 segment 的自动预填
 - 复用现有的 `source = ai` 和 `ai_track_id`
 
 本次不做：
 
 - 自动提交
-- non-simple 单帧自动预填
 - 新数据库 schema
 - 可视化推荐解释面板
 
@@ -36,7 +35,7 @@
 因此最小闭环是：
 
 1. 后端真正返回 `recommendations`
-2. 前端在稳定段载入时自动调用“应用 AI 框”
+2. 前端在 segment 载入时自动调用“应用 AI 框”
 
 ## Recommendation Source
 
@@ -90,7 +89,7 @@
 
 ## Frontend Behavior
 
-当 `stable_segment` 打开时：
+当任意 segment 打开时：
 
 1. 前端先加载 `frame.ai_boxes`
 2. 再读取 `frame.recommendations`
@@ -102,7 +101,6 @@
 
 要求：
 
-- 仅对 `stable_segment` 自动应用
 - 不弹 toast
 - 不覆盖已存在的用户编辑状态
 - 若推荐无效或找不到 bbox，直接跳过
@@ -119,8 +117,9 @@
 
 1. 有清晰历史多数票时，`next_segment` 返回推荐
 2. 历史票数并列时，不返回推荐
-3. 推荐不会把同一 `slot` 分配给多个 track
-4. 前端逻辑至少保持语法通过
+3. `non_simple_single_frame` 也返回推荐
+4. 推荐不会把同一 `slot` 分配给多个 track
+5. 前端逻辑至少保持语法通过
 
 ## Rollout
 

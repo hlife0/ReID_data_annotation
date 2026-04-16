@@ -1682,16 +1682,15 @@ class AnnotationState:
     def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
         annotation_count = self._annotation_count_for_frame(segment.video_stem, segment.representative_frame)
         recommendations: List[Dict[str, Any]] = []
-        if segment.segment_type == "stable_segment":
-            conn = self._connect()
-            try:
-                recommendations = self._build_recommendations(
-                    conn=conn,
-                    video_stem=segment.video_stem,
-                    ai_boxes=self.ai_boxes.get((segment.video_stem, segment.representative_frame), []),
-                )
-            finally:
-                conn.close()
+        conn = self._connect()
+        try:
+            recommendations = self._build_recommendations(
+                conn=conn,
+                video_stem=segment.video_stem,
+                ai_boxes=self.ai_boxes.get((segment.video_stem, segment.representative_frame), []),
+            )
+        finally:
+            conn.close()
         frame = self._build_frame_payload(
             segment.video_stem,
             segment.representative_frame,

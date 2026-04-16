@@ -378,6 +378,72 @@ class SegmentReviewServerTests(unittest.TestCase):
         self.assertNotIn("11", rec_by_track)
         self.assertEqual(rec_by_track["12"]["slot"], "p2")
 
+    def test_non_simple_segment_payload_includes_history_based_recommendations(self) -> None:
+        state = self._make_state()
+        self._insert_annotation(
+            state,
+            "annotator_history_a",
+            1,
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 10,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "ai",
+                    "ai_track_id": "11",
+                },
+                {
+                    "slot": "p2",
+                    "bbox_x": 80,
+                    "bbox_y": 18,
+                    "bbox_w": 32,
+                    "bbox_h": 42,
+                    "source": "ai",
+                    "ai_track_id": "12",
+                },
+            ],
+        )
+
+        state.submit_segment(
+            "annotator_segment_history",
+            "sample_seg_001",
+            {
+                "segment_id": "sample_seg_001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "timestamp_ms": 1033.333,
+                "slots": [
+                    {
+                        "slot": "p1",
+                        "bbox_x": 12,
+                        "bbox_y": 20,
+                        "bbox_w": 30,
+                        "bbox_h": 40,
+                        "source": "ai",
+                        "ai_track_id": "11",
+                    },
+                    {
+                        "slot": "p2",
+                        "bbox_x": 82,
+                        "bbox_y": 18,
+                        "bbox_w": 32,
+                        "bbox_h": 42,
+                        "source": "ai",
+                        "ai_track_id": "12",
+                    },
+                ],
+            },
+        )
+
+        payload = state.segment_detail("sample_seg_002")
+        recommendations = payload["frame"]["recommendations"]
+        rec_by_slot = {item["slot"]: item for item in recommendations}
+
+        self.assertEqual(rec_by_slot["p1"]["ai_track_id"], "11")
+        self.assertEqual(rec_by_slot["p2"]["ai_track_id"], "12")
+
 
 if __name__ == "__main__":
     unittest.main()

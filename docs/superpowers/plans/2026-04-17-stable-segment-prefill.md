@@ -1,10 +1,10 @@
-# Stable Segment Prefill Implementation Plan
+# Segment Prefill Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add history-based stable-segment recommendations in the backend and auto-prefill the recommended AI boxes in the review UI.
+**Goal:** Add history-based per-segment recommendations in the backend and auto-prefill the recommended AI boxes in the review UI.
 
-**Architecture:** Compute recommendations directly from existing `annotations.slots_json` per `video_stem`, return them in the existing `frame.recommendations` payload, and let the browser auto-apply them only when a stable segment is opened. Reuse current slot state shape and current `source = ai` semantics.
+**Architecture:** Compute recommendations directly from existing `annotations.slots_json` per `video_stem`, return them in the existing `frame.recommendations` payload for any segment, and let the browser auto-apply them when a segment is opened. Reuse current slot state shape and current `source = ai` semantics.
 
 **Tech Stack:** Python, sqlite3, JSON, vanilla JavaScript, unittest
 
@@ -32,6 +32,7 @@ Add tests for:
 
 - stable segment payload includes recommendations from annotation history
 - ambiguous history ties do not emit a recommendation
+- non-simple segment payload also includes recommendations
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -75,9 +76,9 @@ Return recommendations only when:
 - best slot is unique
 - slot/track assignment stays one-to-one
 
-- [ ] **Step 3: Attach recommendations to stable-segment payloads**
+- [ ] **Step 3: Attach recommendations to all segment payloads**
 
-Keep non-simple payloads unchanged.
+Reuse the same history logic for both stable and non-simple segments.
 
 - [ ] **Step 4: Run tests to verify green**
 
@@ -109,7 +110,7 @@ git commit -m "feat: add stable segment recommendation payloads"
 
 Refactor the existing AI apply path so recommendations can populate slots without toast spam.
 
-- [ ] **Step 2: Auto-apply recommendations on stable-segment load**
+- [ ] **Step 2: Auto-apply recommendations on segment load**
 
 Only do this after:
 
@@ -168,7 +169,7 @@ git status --short
 
 - Spec coverage:
   - backend recommendation generation: Task 2
-  - stable-only auto-prefill: Task 3
+  - all-segment auto-prefill: Task 3
   - verification: Task 4
 - No placeholders remain for files or commands.
-- Scope stays intentionally small: no DB schema changes, no non-simple prefill.
+- Scope stays intentionally small: no DB schema changes, no auto-submit.

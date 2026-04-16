@@ -428,8 +428,8 @@ function buildAiPrefillState(tid) {
   };
 }
 
-function applyStableSegmentRecommendations() {
-  if (!state.currentSegment || state.currentSegment.segment_type !== "stable_segment") return;
+function applySegmentRecommendations() {
+  if (!state.currentSegment) return;
   const recommendations = Array.isArray(state.frame?.recommendations) ? state.frame.recommendations : [];
   if (recommendations.length === 0) return;
 
@@ -913,7 +913,7 @@ function applyFrame(frame, options = {}) {
   drawCanvas();
   setHintByKey("hint_loading");
   resetSlots();
-  applyStableSegmentRecommendations();
+  applySegmentRecommendations();
   syncHeader();
   renderSegmentSummary();
   updateProgress();
