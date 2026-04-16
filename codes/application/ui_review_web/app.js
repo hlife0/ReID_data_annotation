@@ -67,6 +67,7 @@ const I18N = {
     toast_edit_saved: "修改已保存",
     progress_label: "进度",
     slots_title: "标注槽位",
+    bulk_mark_remaining_absent: "其余设为不存在",
     err_bbox_missing: "{slot} 框未设置",
     err_bbox_wh: "{slot} 框必须满足 w>0 且 h>0",
     err_source_invalid: "{slot} 来源无效",
@@ -140,6 +141,7 @@ const I18N = {
     toast_edit_saved: "Changes saved",
     progress_label: "Progress",
     slots_title: "Slots",
+    bulk_mark_remaining_absent: "Mark Rest Missing",
     err_bbox_missing: "{slot} bbox is missing",
     err_bbox_wh: "{slot} bbox must have w>0 and h>0",
     err_source_invalid: "{slot} source is invalid",
@@ -195,6 +197,7 @@ const refs = {
   frameIndex: document.getElementById("frameIndex"),
   timestampMs: document.getElementById("timestampMs"),
   annoCount: document.getElementById("annoCount"),
+  markRemainingAbsentBtn: document.getElementById("markRemainingAbsentBtn"),
   canvas: document.getElementById("frameCanvas"),
   canvasHint: document.getElementById("canvasHint"),
   toast: document.getElementById("toast"),
@@ -857,6 +860,24 @@ function markSlotState(slot, source) {
   setHintByKey("hint_marked_absent", { slot: slotName(slot) });
 }
 
+function markRemainingSlotsAbsent() {
+  if (!state.frame) {
+    showToastKey("toast_no_frame", {}, true);
+    return;
+  }
+  let updated = 0;
+  for (const slot of state.slotNames) {
+    if (!state.slots[slot] || state.slots[slot].source !== "not_set") continue;
+    state.slots[slot] = { bbox: null, source: "absent", aiTrackId: "" };
+    updated += 1;
+  }
+  if (updated > 0) {
+    syncActiveSlotUI();
+    renderSlotTabs();
+    drawCanvas();
+  }
+}
+
 function validateSubmission() {
   for (const slot of state.slotNames) {
     const s = state.slots[slot];
@@ -1216,6 +1237,7 @@ function initEvents() {
   refs.nextSegmentBtn.addEventListener("click", requestNextSegment);
   refs.nextFrameBtn.addEventListener("click", requestNextSegment);
   refs.submitBtn.addEventListener("click", submitAndNext);
+  refs.markRemainingAbsentBtn.addEventListener("click", markRemainingSlotsAbsent);
   refs.activeDrawBtn.addEventListener("click", () => startDraw(state.activeSlot));
   refs.activeAbsentBtn.addEventListener("click", () => markSlotAbsent(state.activeSlot));
   refs.activeOccludedBtn.addEventListener("click", () => markSlotState(state.activeSlot, "occluded"));
