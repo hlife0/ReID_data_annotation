@@ -416,6 +416,18 @@ function setSlotBbox(slot, bbox, source, aiTrackId = "") {
   drawCanvas();
 }
 
+function setSlotStateQuiet(slot, bbox, source, aiTrackId = "") {
+  state.slots[slot].bbox = bbox ? clampBbox(bbox) : null;
+  state.slots[slot].source = source;
+  state.slots[slot].aiTrackId = aiTrackId;
+}
+
+function refreshSlotViews() {
+  syncActiveSlotUI();
+  renderSlotTabs();
+  drawCanvas();
+}
+
 function buildAiPrefillState(tid) {
   const box = state.aiByTrack.get(String(tid));
   if (!box) return null;
@@ -447,15 +459,13 @@ function applySegmentRecommendations() {
     if (state.slots[slot]?.source !== "not_set") continue;
     const prefill = buildAiPrefillState(tid);
     if (!prefill) continue;
-    state.slots[slot] = prefill;
+    setSlotStateQuiet(slot, prefill.bbox, prefill.source, prefill.aiTrackId);
     usedSlots.add(slot);
     usedTracks.add(tid);
     applied += 1;
   }
   if (applied > 0) {
-    syncActiveSlotUI();
-    renderSlotTabs();
-    drawCanvas();
+    refreshSlotViews();
   }
 }
 
@@ -868,13 +878,11 @@ function markRemainingSlotsAbsent() {
   let updated = 0;
   for (const slot of state.slotNames) {
     if (!state.slots[slot] || state.slots[slot].source !== "not_set") continue;
-    state.slots[slot] = { bbox: null, source: "absent", aiTrackId: "" };
+    setSlotStateQuiet(slot, null, "absent", "");
     updated += 1;
   }
   if (updated > 0) {
-    syncActiveSlotUI();
-    renderSlotTabs();
-    drawCanvas();
+    refreshSlotViews();
   }
 }
 

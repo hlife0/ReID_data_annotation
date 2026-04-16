@@ -13,6 +13,10 @@
 - `./annotation/batch_20260413_v01`
 - 当前批次的段级压缩统计报告见：
   - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
+- 当前推荐用于试运行最新降本策略与 UI 行为的派生 batch：
+  - `./annotation/batch_20260417_v01`
+  - 统计报告见：
+    - [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)
 
 ---
 
