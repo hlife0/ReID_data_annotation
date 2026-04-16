@@ -145,6 +145,18 @@ class SegmentReviewServerTests(unittest.TestCase):
         state.initialize()
         return state
 
+    def _write_segment_prep(self, segments: list[dict[str, object]], frame_to_segment: dict[str, str]) -> None:
+        with (self.batch_dir / "segment_prep" / "sample.segments.json").open("w", encoding="utf-8") as f:
+            json.dump({"video_stem": "sample", "segments": segments}, f, ensure_ascii=False, indent=2)
+        with (self.batch_dir / "segment_prep" / "sample.segment_frames.json").open("w", encoding="utf-8") as f:
+            json.dump({"video_stem": "sample", "frame_to_segment": frame_to_segment}, f, ensure_ascii=False, indent=2)
+
+    def _write_pseudo_rows(self, rows: list[str]) -> None:
+        (self.batch_dir / "pseudo_labels" / "sample.auto.csv").write_text(
+            "video_stem,frame_index,timestamp_ms,track_id,bbox_x,bbox_y,bbox_w,bbox_h,score\n" + "".join(rows),
+            encoding="utf-8",
+        )
+
     def _insert_annotation(
         self,
         state: mod.AnnotationState,
@@ -443,6 +455,228 @@ class SegmentReviewServerTests(unittest.TestCase):
 
         self.assertEqual(rec_by_slot["p1"]["ai_track_id"], "11")
         self.assertEqual(rec_by_slot["p2"]["ai_track_id"], "12")
+
+    def test_repair_window_payload_includes_anchor_sequence(self) -> None:
+        self._write_segment_prep(
+            [
+                {
+                    "segment_id": "sample_seg_001",
+                    "video_stem": "sample",
+                    "segment_type": "repair_window",
+                    "start_frame": 1,
+                    "end_frame": 4,
+                    "representative_frame": 1,
+                    "track_ids": [11, 12],
+                    "frame_count": 4,
+                    "anchor_candidates": [1, 4],
+                    "repairability_score": 0.92,
+                    "fragmentation_score": 7,
+                    "expected_gain": 2,
+                    "trigger_reason": "fragment_cluster",
+                }
+            ],
+            {"1": "sample_seg_001", "2": "sample_seg_001", "3": "sample_seg_001", "4": "sample_seg_001"},
+        )
+
+        state = self._make_state()
+        payload = state.assign_next_segment("annotator_repair")
+
+        self.assertEqual(payload["segment"]["segment_type"], "repair_window")
+        self.assertEqual(payload["frame"]["frame_index"], 1)
+        self.assertEqual(payload["repair_window"]["anchor_frames"], [1, 4])
+        self.assertEqual(payload["repair_window"]["current_anchor_index"], 0)
+        self.assertEqual(payload["repair_window"]["anchor_count"], 2)
+
+    def test_repair_window_submit_writes_filled_frame_records(self) -> None:
+        self._write_segment_prep(
+            [
+                {
+                    "segment_id": "sample_seg_001",
+                    "video_stem": "sample",
+                    "segment_type": "repair_window",
+                    "start_frame": 1,
+                    "end_frame": 4,
+                    "representative_frame": 1,
+                    "track_ids": [11, 12],
+                    "frame_count": 4,
+                    "anchor_candidates": [1, 4],
+                    "repairability_score": 0.92,
+                    "fragmentation_score": 7,
+                    "expected_gain": 2,
+                    "trigger_reason": "fragment_cluster",
+                }
+            ],
+            {"1": "sample_seg_001", "2": "sample_seg_001", "3": "sample_seg_001", "4": "sample_seg_001"},
+        )
+
+        state = self._make_state()
+        result = state.submit_segment(
+            "annotator_repair",
+            "sample_seg_001",
+            {
+                "segment_id": "sample_seg_001",
+                "anchor_annotations": [
+                    {
+                        "video_stem": "sample",
+                        "frame_index": 1,
+                        "timestamp_ms": 1000,
+                        "slots": [
+                            {
+                                "slot": "p1",
+                                "bbox_x": 10,
+                                "bbox_y": 20,
+                                "bbox_w": 30,
+                                "bbox_h": 40,
+                                "source": "ai",
+                                "ai_track_id": "11",
+                            },
+                            {
+                                "slot": "p2",
+                                "bbox_x": 80,
+                                "bbox_y": 18,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "12",
+                            },
+                        ],
+                    },
+                    {
+                        "video_stem": "sample",
+                        "frame_index": 4,
+                        "timestamp_ms": 1100,
+                        "slots": [
+                            {
+                                "slot": "p1",
+                                "bbox_x": 20,
+                                "bbox_y": 26,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "11",
+                            },
+                            {
+                                "slot": "p2",
+                                "bbox_x": 84,
+                                "bbox_y": 18,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "12",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(result["submitted_frame_count"], 4)
+        history = state.list_annotations_for_annotator("annotator_repair")
+        self.assertEqual(len(history), 4)
+        details = [state.annotation_detail("annotator_repair", item["annotation_id"]) for item in history]
+        by_frame = {item["frame"]["frame_index"]: item for item in details}
+        self.assertEqual(by_frame[2]["annotation"]["slots"][0]["ai_track_id"], "11")
+        self.assertEqual(by_frame[3]["annotation"]["slots"][1]["ai_track_id"], "12")
+
+    def test_repair_window_submit_returns_fallback_when_track_missing_midwindow(self) -> None:
+        self._write_pseudo_rows(
+            [
+                "sample,1,1000,11,10,20,30,40,0.95\n",
+                "sample,1,1000,12,80,18,32,42,0.94\n",
+                "sample,2,1033.333,12,82,18,32,42,0.94\n",
+                "sample,3,1066.667,11,14,20,30,40,0.95\n",
+                "sample,3,1066.667,12,84,18,32,42,0.94\n",
+                "sample,4,1100,11,20,26,32,42,0.94\n",
+                "sample,4,1100,12,84,18,32,42,0.94\n",
+            ]
+        )
+        self._write_segment_prep(
+            [
+                {
+                    "segment_id": "sample_seg_001",
+                    "video_stem": "sample",
+                    "segment_type": "repair_window",
+                    "start_frame": 1,
+                    "end_frame": 4,
+                    "representative_frame": 1,
+                    "track_ids": [11, 12],
+                    "frame_count": 4,
+                    "anchor_candidates": [1, 4],
+                    "repairability_score": 0.92,
+                    "fragmentation_score": 7,
+                    "expected_gain": 2,
+                    "trigger_reason": "fragment_cluster",
+                }
+            ],
+            {"1": "sample_seg_001", "2": "sample_seg_001", "3": "sample_seg_001", "4": "sample_seg_001"},
+        )
+
+        state = self._make_state()
+        result = state.submit_segment(
+            "annotator_repair",
+            "sample_seg_001",
+            {
+                "segment_id": "sample_seg_001",
+                "anchor_annotations": [
+                    {
+                        "video_stem": "sample",
+                        "frame_index": 1,
+                        "timestamp_ms": 1000,
+                        "slots": [
+                            {
+                                "slot": "p1",
+                                "bbox_x": 10,
+                                "bbox_y": 20,
+                                "bbox_w": 30,
+                                "bbox_h": 40,
+                                "source": "ai",
+                                "ai_track_id": "11",
+                            },
+                            {
+                                "slot": "p2",
+                                "bbox_x": 80,
+                                "bbox_y": 18,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "12",
+                            },
+                        ],
+                    },
+                    {
+                        "video_stem": "sample",
+                        "frame_index": 4,
+                        "timestamp_ms": 1100,
+                        "slots": [
+                            {
+                                "slot": "p1",
+                                "bbox_x": 20,
+                                "bbox_y": 26,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "11",
+                            },
+                            {
+                                "slot": "p2",
+                                "bbox_x": 84,
+                                "bbox_y": 18,
+                                "bbox_w": 32,
+                                "bbox_h": 42,
+                                "source": "ai",
+                                "ai_track_id": "12",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(result["submitted_frame_count"], 0)
+        self.assertEqual(result["fallback"]["reason"], "missing_ai_track")
+        self.assertEqual(result["fallback"]["missing_frames"], [2])
+        history = state.list_annotations_for_annotator("annotator_repair")
+        self.assertEqual(history, [])
 
 
 if __name__ == "__main__":
