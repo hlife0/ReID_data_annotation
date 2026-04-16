@@ -70,6 +70,15 @@
 
 其中当前优先落地的是前 `3` 步。
 
+这里的 `算法分段` 必须严格分成两个顺序步骤：
+
+1. 先按当前既有规则完成一次 first-pass segmentation，产出：
+   - `stable_segment`
+   - `non_simple_single_frame`
+2. 再只基于这份 first-pass 结果，做 second-pass 的 `repair_window` 搜索与合并
+
+`repair_window` 只能是 second-pass merge layer，不能替代 first-pass segmentation。
+
 ## Step 1: AI 预标注
 
 ### Purpose
@@ -93,13 +102,36 @@
 
 把 frame-level AI 结果整理成适合第一轮人工粗标的工作单元。
 
+### Hard Constraint
+
+这一层必须遵守以下底线：
+
+- 必须先完整跑一遍现有的 first-pass 规则
+- 必须先得到：
+  - `stable_segment`
+  - `non_simple_single_frame`
+- 然后才能在这份结果之上寻找并合并 `repair_window`
+
+明确禁止：
+
+- 直接从 raw frame / raw detection 生成 `repair_window`
+- 用 `repair_window` 替代 `stable_segment + non_simple_single_frame` 的 first-pass 主语义
+- 先做 `repair_window`，再回头补 stable / non-simple
+
+一句话说，`repair_window` 只能建立在“现有稳定段 + 复杂单帧”的第一次切分结果之上，它是 second-pass merge，不是 first-pass segmentation。
+
 ### First-Pass Segment Types
 
-第一轮只允许以下 `3` 类工作单元：
+first-pass 只允许以下 `2` 类基础结果：
+
+1. `stable_segment`
+2. `non_simple_single_frame`
+
+在 first-pass 完成之后，最终进入第一轮人工粗标的工作单元才允许是以下 `3` 类：
 
 1. `stable_segment`
 2. `repair_window`
-3. 极少量 `non_simple_single_frame`
+3. 极少量剩余 `non_simple_single_frame`
 
 ### `stable_segment`
 
@@ -115,9 +147,10 @@
 - 不再以直接展开最终框为目标
 - 改为服务第一轮粗标
 
-生成规则先按简单、便宜版本定义：
+生成规则必须建立在 first-pass 结果之上，先按简单、便宜版本定义：
 
-- 把连续碎片段合并成一个 `repair_window`
+- 从连续碎片段中搜索可合并区间
+- 把 second-pass 选中的连续碎片段合并成一个 `repair_window`
 - 连续碎片段可包含：
   - `non_simple_single_frame`
   - 很短的 `stable_segment`
@@ -298,15 +331,17 @@
 
 当前设计对应的第一轮测试重点应包括：
 
-1. `stable_segment` 只返回代表帧粗标任务
-2. `repair_window` 只返回中间帧粗标任务
-3. 第一轮页面不再暴露手动画框入口
-4. 每个槽位只允许：
+1. 先完成 first-pass，产出 `stable_segment + non_simple_single_frame`
+2. `repair_window` 只能在 first-pass 结果上 second-pass 合并生成
+3. `stable_segment` 只返回代表帧粗标任务
+4. `repair_window` 只返回中间帧粗标任务
+5. 第一轮页面不再暴露手动画框入口
+6. 每个槽位只允许：
    - `ai_match`
    - `absent`
    - `needs_manual`
-5. `outside` 和不可分辨遮挡在第一轮统一进 `absent`
-6. 第一轮产物存 coarse decision，而不是最终 bbox
+7. `outside` 和不可分辨遮挡在第一轮统一进 `absent`
+8. 第一轮产物存 coarse decision，而不是最终 bbox
 
 ## Rollout
 
@@ -316,7 +351,7 @@
 
 只改：
 
-- segment 语义
+- first-pass 之后的 second-pass `repair_window` 合并层
 - 第一轮 UI 语义
 - coarse decision 存储
 
