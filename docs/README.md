@@ -227,3 +227,4 @@ node --check codes/application/ui_admin_web/app.js
 - [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)
 - [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
 - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
+- [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)
