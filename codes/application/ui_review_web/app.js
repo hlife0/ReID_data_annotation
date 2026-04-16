@@ -413,6 +413,49 @@ function setSlotBbox(slot, bbox, source, aiTrackId = "") {
   drawCanvas();
 }
 
+function buildAiPrefillState(tid) {
+  const box = state.aiByTrack.get(String(tid));
+  if (!box) return null;
+  return {
+    bbox: clampBbox({
+      x: box.bbox_x,
+      y: box.bbox_y,
+      w: box.bbox_w,
+      h: box.bbox_h,
+    }),
+    source: "ai",
+    aiTrackId: String(tid),
+  };
+}
+
+function applyStableSegmentRecommendations() {
+  if (!state.currentSegment || state.currentSegment.segment_type !== "stable_segment") return;
+  const recommendations = Array.isArray(state.frame?.recommendations) ? state.frame.recommendations : [];
+  if (recommendations.length === 0) return;
+
+  const usedSlots = new Set();
+  const usedTracks = new Set();
+  let applied = 0;
+  for (const rec of recommendations) {
+    const slot = String(rec.slot || "").trim().toLowerCase();
+    const tid = String(rec.ai_track_id || "").trim();
+    if (!state.slotNames.includes(slot) || !tid) continue;
+    if (usedSlots.has(slot) || usedTracks.has(tid)) continue;
+    if (state.slots[slot]?.source !== "not_set") continue;
+    const prefill = buildAiPrefillState(tid);
+    if (!prefill) continue;
+    state.slots[slot] = prefill;
+    usedSlots.add(slot);
+    usedTracks.add(tid);
+    applied += 1;
+  }
+  if (applied > 0) {
+    syncActiveSlotUI();
+    renderSlotTabs();
+    drawCanvas();
+  }
+}
+
 function renderSlotTabs() {
   refs.slotTabs.innerHTML = "";
   for (const slot of state.slotNames) {
@@ -870,6 +913,7 @@ function applyFrame(frame, options = {}) {
   drawCanvas();
   setHintByKey("hint_loading");
   resetSlots();
+  applyStableSegmentRecommendations();
   syncHeader();
   renderSegmentSummary();
   updateProgress();

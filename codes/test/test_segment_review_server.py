@@ -5,6 +5,7 @@ import csv
 import json
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 import cv2
@@ -144,6 +145,38 @@ class SegmentReviewServerTests(unittest.TestCase):
         state.initialize()
         return state
 
+    def _insert_annotation(
+        self,
+        state: mod.AnnotationState,
+        annotator_id: str,
+        frame_index: int,
+        slots: list[dict[str, object]],
+    ) -> None:
+        record = {
+            "annotation_id": f"ann_test_{uuid.uuid4().hex[:8]}",
+            "video_stem": "sample",
+            "frame_index": frame_index,
+            "timestamp_ms": {1: 1000.0, 2: 1033.333, 3: 1066.667, 4: 1100.0}[frame_index],
+            "annotator_id": annotator_id,
+            "submitted_at": "2026-04-17T00:00:00.000",
+            "slots_json": json.dumps(state._validate_slots_payload(slots), ensure_ascii=False),
+        }
+        conn = state._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            state._insert_annotation(conn, record)
+            conn.execute(
+                """
+                UPDATE frame_counts
+                SET annotation_count = annotation_count + 1
+                WHERE video_stem=? AND frame_index=?
+                """,
+                ("sample", frame_index),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def test_segment_pool_loads_and_returns_representative_frame_payload(self) -> None:
         state = self._make_state()
         payload = state.assign_next_segment("annotator_segment")
@@ -233,6 +266,117 @@ class SegmentReviewServerTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         detail = state.annotation_detail("annotator_segment_single", history[0]["annotation_id"])
         self.assertEqual(detail["frame"]["frame_index"], 4)
+
+    def test_stable_segment_payload_includes_history_based_recommendations(self) -> None:
+        state = self._make_state()
+        self._insert_annotation(
+            state,
+            "annotator_history_a",
+            1,
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 10,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "ai",
+                    "ai_track_id": "11",
+                },
+                {
+                    "slot": "p2",
+                    "bbox_x": 80,
+                    "bbox_y": 18,
+                    "bbox_w": 32,
+                    "bbox_h": 42,
+                    "source": "ai",
+                    "ai_track_id": "12",
+                },
+            ],
+        )
+        self._insert_annotation(
+            state,
+            "annotator_history_b",
+            3,
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 14,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "manual_param",
+                    "ai_track_id": "11",
+                },
+                {
+                    "slot": "p2",
+                    "bbox_x": 84,
+                    "bbox_y": 18,
+                    "bbox_w": 32,
+                    "bbox_h": 42,
+                    "source": "manual_param",
+                    "ai_track_id": "12",
+                },
+            ],
+        )
+
+        payload = state.assign_next_segment("annotator_segment")
+        recommendations = payload["frame"]["recommendations"]
+        rec_by_slot = {item["slot"]: item for item in recommendations}
+
+        self.assertEqual(rec_by_slot["p1"]["ai_track_id"], "11")
+        self.assertEqual(rec_by_slot["p2"]["ai_track_id"], "12")
+
+    def test_stable_segment_payload_skips_ambiguous_history_recommendation(self) -> None:
+        state = self._make_state()
+        self._insert_annotation(
+            state,
+            "annotator_history_a",
+            1,
+            [
+                {
+                    "slot": "p1",
+                    "bbox_x": 10,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "ai",
+                    "ai_track_id": "11",
+                },
+                {
+                    "slot": "p2",
+                    "bbox_x": 80,
+                    "bbox_y": 18,
+                    "bbox_w": 32,
+                    "bbox_h": 42,
+                    "source": "ai",
+                    "ai_track_id": "12",
+                },
+            ],
+        )
+        self._insert_annotation(
+            state,
+            "annotator_history_b",
+            3,
+            [
+                {
+                    "slot": "p2",
+                    "bbox_x": 14,
+                    "bbox_y": 20,
+                    "bbox_w": 30,
+                    "bbox_h": 40,
+                    "source": "manual_param",
+                    "ai_track_id": "11",
+                },
+            ],
+        )
+
+        payload = state.assign_next_segment("annotator_segment")
+        recommendations = payload["frame"]["recommendations"]
+        rec_by_track = {item["ai_track_id"]: item for item in recommendations}
+
+        self.assertNotIn("11", rec_by_track)
+        self.assertEqual(rec_by_track["12"]["slot"], "p2")
 
 
 if __name__ == "__main__":

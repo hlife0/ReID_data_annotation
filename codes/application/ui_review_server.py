@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections import OrderedDict, deque
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
@@ -1650,7 +1650,13 @@ class AnnotationState:
         finally:
             conn.close()
 
-    def _build_frame_payload(self, stem: str, frame_index: int, annotation_count: int) -> Dict[str, Any]:
+    def _build_frame_payload(
+        self,
+        stem: str,
+        frame_index: int,
+        annotation_count: int,
+        recommendations: List[Dict[str, Any]] | None = None,
+    ) -> Dict[str, Any]:
         key = (stem, frame_index)
         if key not in self.frame_lookup:
             raise ValueError("frame not found in frame pool")
@@ -1668,14 +1674,30 @@ class AnnotationState:
             "image_width": width,
             "image_height": height,
             "ai_boxes": self.ai_boxes.get(key, []),
-            "recommendations": [],
+            "recommendations": recommendations or [],
             "slot_names": SLOT_NAMES,
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
     def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
         annotation_count = self._annotation_count_for_frame(segment.video_stem, segment.representative_frame)
-        frame = self._build_frame_payload(segment.video_stem, segment.representative_frame, annotation_count)
+        recommendations: List[Dict[str, Any]] = []
+        if segment.segment_type == "stable_segment":
+            conn = self._connect()
+            try:
+                recommendations = self._build_recommendations(
+                    conn=conn,
+                    video_stem=segment.video_stem,
+                    ai_boxes=self.ai_boxes.get((segment.video_stem, segment.representative_frame), []),
+                )
+            finally:
+                conn.close()
+        frame = self._build_frame_payload(
+            segment.video_stem,
+            segment.representative_frame,
+            annotation_count,
+            recommendations=recommendations,
+        )
         return {
             "segment": {
                 "segment_id": segment.segment_id,
@@ -1917,7 +1939,89 @@ class AnnotationState:
         video_stem: str,
         ai_boxes: List[Dict[str, float | int]],
     ) -> List[Dict[str, str]]:
-        return []
+        if not ai_boxes:
+            return []
+
+        rows = conn.execute(
+            """
+            SELECT slots_json
+            FROM annotations
+            WHERE video_stem=?
+            ORDER BY submitted_at ASC, annotation_id ASC
+            """,
+            (video_stem,),
+        ).fetchall()
+        if not rows:
+            return []
+
+        slot_rank = {slot: idx for idx, slot in enumerate(SLOT_NAMES)}
+        votes_by_track: Dict[str, Counter[str]] = {}
+        for row in rows:
+            try:
+                slots = json.loads(str(row["slots_json"]))
+            except Exception:
+                continue
+            if not isinstance(slots, list):
+                continue
+            for item in slots:
+                if not isinstance(item, dict):
+                    continue
+                slot = str(item.get("slot", "")).strip().lower()
+                if slot not in slot_rank:
+                    continue
+                source = str(item.get("source", "")).strip()
+                if source in {"absent", "occluded", "outside", "not_set"}:
+                    continue
+                ai_track_id = str(item.get("ai_track_id", "") or "").strip()
+                if not ai_track_id:
+                    continue
+                votes_by_track.setdefault(ai_track_id, Counter())[slot] += 1
+
+        candidates: List[Dict[str, Any]] = []
+        visible_track_ids = sorted({str(int(float(box["track_id"]))) for box in ai_boxes})
+        for ai_track_id in visible_track_ids:
+            counts = votes_by_track.get(ai_track_id)
+            if not counts:
+                continue
+            ranked = sorted(
+                counts.items(),
+                key=lambda item: (-item[1], slot_rank[item[0]]),
+            )
+            if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+                continue
+            slot, vote_count = ranked[0]
+            total_votes = sum(counts.values())
+            if vote_count <= 0 or total_votes <= 0:
+                continue
+            candidates.append(
+                {
+                    "slot": slot,
+                    "ai_track_id": ai_track_id,
+                    "vote_count": vote_count,
+                    "confidence": _safe_float(vote_count / total_votes),
+                    "reason": "history_majority",
+                }
+            )
+
+        candidates.sort(
+            key=lambda item: (
+                -int(item["vote_count"]),
+                -float(item["confidence"]),
+                int(str(item["ai_track_id"])),
+            )
+        )
+        recommendations: List[Dict[str, Any]] = []
+        used_slots: set[str] = set()
+        used_tracks: set[str] = set()
+        for item in candidates:
+            slot = str(item["slot"])
+            ai_track_id = str(item["ai_track_id"])
+            if slot in used_slots or ai_track_id in used_tracks:
+                continue
+            used_slots.add(slot)
+            used_tracks.add(ai_track_id)
+            recommendations.append(item)
+        return recommendations
 
     def _create_and_insert_assignment(
         self,
