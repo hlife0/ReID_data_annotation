@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from collections import Counter, OrderedDict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -389,6 +389,19 @@ class AnnotationState:
                 raise ValueError(f"unsupported segment type: {segment.segment_type}")
 
             if fallback is not None:
+                next_segment_payload = None
+                suggested_anchor_frames = [int(v) for v in fallback.get("suggested_anchor_frames", [])]
+                if suggested_anchor_frames:
+                    merged_anchors = sorted({*segment.anchor_candidates, *suggested_anchor_frames})
+                    next_anchor_index = merged_anchors.index(suggested_anchor_frames[0])
+                    next_segment_payload = self._segment_payload(
+                        replace(
+                            segment,
+                            anchor_candidates=merged_anchors,
+                            representative_frame=merged_anchors[0],
+                        ),
+                        current_anchor_index=next_anchor_index,
+                    )
                 return {
                     "submitted": {
                         "segment_id": segment.segment_id,
@@ -399,7 +412,7 @@ class AnnotationState:
                     },
                     "submitted_frame_count": 0,
                     "fallback": fallback,
-                    "next_segment": self._segment_payload(segment),
+                    "next_segment": next_segment_payload,
                 }
 
             conn = self._connect()
@@ -1778,6 +1791,12 @@ class AnnotationState:
                         end_item,
                     )
                     if fallback is not None:
+                        candidate_frames = sorted({*segment.anchor_candidates, *fallback.get("missing_frames", [])})
+                        if len(candidate_frames) <= 4:
+                            fallback = {
+                                **fallback,
+                                "suggested_anchor_frames": [frame for frame in fallback.get("missing_frames", []) if frame not in segment.anchor_candidates],
+                            }
                         return None, fallback
                     assert slot_payload is not None
                     frame_slots.append(slot_payload)
@@ -1894,7 +1913,7 @@ class AnnotationState:
             "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
         }
 
-    def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
+    def _segment_payload(self, segment: SegmentRecord, current_anchor_index: int = 0) -> Dict[str, Any]:
         repair_payload: Dict[str, Any] | None = None
         if segment.segment_type == "repair_window":
             anchor_frames = segment.anchor_candidates or [segment.start_frame, segment.end_frame]
@@ -1911,7 +1930,7 @@ class AnnotationState:
             repair_payload = {
                 "anchor_frames": anchor_frames,
                 "anchor_count": len(anchor_frames),
-                "current_anchor_index": 0,
+                "current_anchor_index": max(0, min(current_anchor_index, len(anchor_frames) - 1)),
                 "anchors": anchor_payloads,
             }
         else:

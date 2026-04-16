@@ -1133,7 +1133,15 @@ async function submitAndNext() {
       const repairPayload = buildRepairWindowSubmitPayload();
       const result = await postJson("/api/submit_segment", repairPayload);
       if (result.fallback) {
+        const preserved = new Map(state.repairWindow.annotationsByFrame);
         showToastKey("toast_repair_fallback", {}, true);
+        if (result.next_segment) {
+          applySegmentPayload(result.next_segment, { isAssignment: true });
+          for (const [frameIndex, slots] of preserved.entries()) {
+            state.repairWindow.annotationsByFrame.set(frameIndex, slots);
+          }
+          loadRepairWindowAnchor(Number(state.repairWindow.currentAnchorIndex || 0), { isAssignment: true });
+        }
         return;
       }
       exitEditMode();

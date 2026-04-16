@@ -675,6 +675,9 @@ class SegmentReviewServerTests(unittest.TestCase):
         self.assertEqual(result["submitted_frame_count"], 0)
         self.assertEqual(result["fallback"]["reason"], "missing_ai_track")
         self.assertEqual(result["fallback"]["missing_frames"], [2])
+        self.assertEqual(result["fallback"]["suggested_anchor_frames"], [2])
+        self.assertEqual(result["next_segment"]["repair_window"]["anchor_frames"], [1, 2, 4])
+        self.assertEqual(result["next_segment"]["repair_window"]["current_anchor_index"], 1)
         history = state.list_annotations_for_annotator("annotator_repair")
         self.assertEqual(history, [])
 
