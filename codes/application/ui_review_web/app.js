@@ -48,6 +48,11 @@ const I18N = {
     toast_no_frame: "当前没有可操作图片",
     toast_ai_not_found: "未找到该AI轨迹",
     toast_submitted_segment: "已提交段 {segment}，写入 {count} 帧",
+    toast_saved_anchor: "已保存锚点 {current}/{total}",
+    toast_repair_fallback: "当前修复窗需要更多人工帧，未自动补全",
+    hint_repair_anchor: "正在标注修复窗锚点 {current}/{total}",
+    submit_next_anchor: "保存并下一锚点",
+    submit_repair_window: "提交修复窗",
     annotator_modal_title: "先填写标注员ID",
     annotator_modal_desc: "未检测到有效的标注员ID。建议现在填写；关闭后将继续使用默认值 {default_id}。",
     annotator_modal_submit: "提交",
@@ -122,6 +127,11 @@ const I18N = {
     toast_no_frame: "No image loaded",
     toast_ai_not_found: "AI track not found",
     toast_submitted_segment: "Submitted {segment}, wrote {count} frames",
+    toast_saved_anchor: "Saved anchor {current}/{total}",
+    toast_repair_fallback: "Repair window needs more manual anchors before auto-fill",
+    hint_repair_anchor: "Labeling repair-window anchor {current}/{total}",
+    submit_next_anchor: "Save & Next Anchor",
+    submit_repair_window: "Submit Repair Window",
     annotator_modal_title: "Set Annotator ID First",
     annotator_modal_desc: "No valid annotator ID was detected. Please fill it now, or close to continue with default value {default_id}.",
     annotator_modal_submit: "Submit",
@@ -183,6 +193,7 @@ const state = {
   editingAnnotationId: "",
   lastAssignmentFrame: null,
   currentSegment: null,
+  repairWindow: null,
   dispatchMode: "segment",
   progressTarget: 4000,
 };
@@ -556,6 +567,12 @@ function syncHeader() {
 }
 
 function updateActionLabels() {
+  if (isRepairWindow()) {
+    const currentIndex = Number(state.repairWindow?.currentAnchorIndex || 0);
+    const anchorCount = Number(state.repairWindow?.anchorCount || 0);
+    refs.submitBtn.textContent = currentIndex + 1 < anchorCount ? t("submit_next_anchor") : t("submit_repair_window");
+    return;
+  }
   refs.submitBtn.textContent = t("submit_next_segment");
 }
 
@@ -925,6 +942,65 @@ function buildSubmitPayload() {
   };
 }
 
+function isRepairWindow() {
+  return !!state.repairWindow && state.currentSegment?.segment_type === "repair_window";
+}
+
+function captureCurrentSlots() {
+  return state.slotNames.map(personSubmitPayload);
+}
+
+function storeRepairWindowAnchorState() {
+  if (!isRepairWindow() || !state.frame) return;
+  state.repairWindow.annotationsByFrame.set(state.frame.frame_index, captureCurrentSlots());
+}
+
+function loadRepairWindowAnchor(index, options = {}) {
+  if (!isRepairWindow()) return;
+  const anchors = Array.isArray(state.repairWindow.anchors) ? state.repairWindow.anchors : [];
+  if (index < 0 || index >= anchors.length) return;
+  state.repairWindow.currentAnchorIndex = index;
+  const frame = anchors[index];
+  applyFrame(frame, options);
+  const saved = state.repairWindow.annotationsByFrame.get(frame.frame_index);
+  if (saved) {
+    applySlotsFromAnnotation(saved);
+  }
+  setHintByKey("hint_repair_anchor", { current: index + 1, total: anchors.length });
+  updateActionLabels();
+}
+
+function advanceRepairWindowAnchor() {
+  if (!isRepairWindow()) return false;
+  storeRepairWindowAnchorState();
+  const nextIndex = Number(state.repairWindow.currentAnchorIndex || 0) + 1;
+  if (nextIndex >= Number(state.repairWindow.anchorCount || 0)) return false;
+  loadRepairWindowAnchor(nextIndex, { isAssignment: true });
+  return true;
+}
+
+function buildRepairWindowSubmitPayload() {
+  if (!isRepairWindow()) return null;
+  storeRepairWindowAnchorState();
+  const anchors = Array.isArray(state.repairWindow.anchors) ? state.repairWindow.anchors : [];
+  return {
+    annotator_id: annotatorId(),
+    segment_id: state.currentSegment.segment_id,
+    anchor_annotations: anchors.map((frame) => {
+      const slots = state.repairWindow.annotationsByFrame.get(frame.frame_index);
+      if (!slots) {
+        throw new Error(`Missing anchor annotation for frame ${frame.frame_index}`);
+      }
+      return {
+        video_stem: frame.video_stem,
+        frame_index: frame.frame_index,
+        timestamp_ms: frame.timestamp_ms,
+        slots,
+      };
+    }),
+  };
+}
+
 function applyFrame(frame, options = {}) {
   state.frame = frame;
   if (Number.isFinite(Number(frame.total_frames)) && Number(frame.total_frames) > 0) {
@@ -955,6 +1031,18 @@ function applyFrame(frame, options = {}) {
 function applySegmentPayload(payload, options = {}) {
   state.dispatchMode = "segment";
   state.currentSegment = payload.segment || null;
+  if (payload.repair_window) {
+    state.repairWindow = {
+      anchorFrames: Array.isArray(payload.repair_window.anchor_frames) ? payload.repair_window.anchor_frames.slice() : [],
+      anchors: Array.isArray(payload.repair_window.anchors) ? payload.repair_window.anchors.slice() : [],
+      anchorCount: Number(payload.repair_window.anchor_count || 0),
+      currentAnchorIndex: Number(payload.repair_window.current_anchor_index || 0),
+      annotationsByFrame: new Map(),
+    };
+    loadRepairWindowAnchor(state.repairWindow.currentAnchorIndex, options);
+    return;
+  }
+  state.repairWindow = null;
   applyFrame(payload.frame, options);
 }
 
@@ -1033,6 +1121,37 @@ async function submitAndNext() {
   }
   refs.submitBtn.disabled = true;
   try {
+    if (isRepairWindow()) {
+      const didAdvance = advanceRepairWindowAnchor();
+      if (didAdvance) {
+        showToastKey("toast_saved_anchor", {
+          current: Number(state.repairWindow.currentAnchorIndex || 0) + 1,
+          total: state.repairWindow.anchorCount,
+        });
+        return;
+      }
+      const repairPayload = buildRepairWindowSubmitPayload();
+      const result = await postJson("/api/submit_segment", repairPayload);
+      if (result.fallback) {
+        showToastKey("toast_repair_fallback", {}, true);
+        return;
+      }
+      exitEditMode();
+      state.repairWindow = null;
+      if (result.next_segment) {
+        applySegmentPayload(result.next_segment, { isAssignment: true });
+      } else {
+        state.currentSegment = null;
+        renderSegmentSummary();
+      }
+      await loadHistory({ silent: true });
+      showToastKey("toast_submitted_segment", {
+        segment: result.submitted.segment_id,
+        count: result.submitted_frame_count,
+      });
+      return;
+    }
+
     const payload = {
       ...buildSubmitPayload(),
       segment_id: state.currentSegment.segment_id,
