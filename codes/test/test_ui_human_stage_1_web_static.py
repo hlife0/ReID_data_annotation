@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+
+class HumanStage1WebStaticTests(unittest.TestCase):
+    def test_human_stage_1_ui_exposes_only_three_coarse_actions(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        html = (
+            repo_root / "codes" / "application" / "ui_human_stage_1_web" / "index.html"
+        ).read_text(encoding="utf-8")
+        js = (
+            repo_root / "codes" / "application" / "ui_human_stage_1_web" / "app.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ai_match", html)
+        self.assertIn("absent", html)
+        self.assertIn("needs_manual", html)
+        self.assertIn("ALLOWED_DECISIONS", js)
+        self.assertIn("needs_manual", js)
+
+        self.assertNotIn("draw_new_box", html)
+        self.assertNotIn("manual_draw", html)
+        self.assertNotIn("bbox_x", html)
+        self.assertNotIn("bbox_y", html)
+        self.assertNotIn("drawNewBox", js)
+        self.assertNotIn("manual_draw", js)
+        self.assertNotIn("bbox_x", js)
+        self.assertNotIn("bbox_y", js)
+
+
+if __name__ == "__main__":
+    unittest.main()
