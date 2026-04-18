@@ -36,6 +36,17 @@
    - `stable_segment`
    - `non_simple_single_frame`
 5. 数学定义文档与段模式需求文档已建立
+6. 已新增独立的一轮粗标主线：
+   - `codes/process/process_human_stage_1_prep.py`
+   - `annotation/batch_*/human_stage_1_prep/`
+   - `codes/application/ui_human_stage_1_server.py`
+   - `codes/application/ui_human_stage_1_web/`
+7. `human_stage_1` 当前已落地的交互包括：
+   - first-pass 之后的 second-pass `repair_window` 合并
+   - 单帧 coarse decision：`ai_match / absent / needs_manual`
+   - 同视频历史多数票推荐与自动预选
+   - 批量“其余设为不存在”
+   - 左侧可折叠历史栏与已提交记录修改
 
 当前主线规范见：
 
@@ -93,12 +104,17 @@
 flowchart LR
     A[data/required] --> B[process/process_prelabel_batch.py]
     B --> C[batch/pseudo_labels/*.auto.csv]
-    C --> D[process/process_segment_review_prep.py]
-    D --> E[batch/segment_prep]
-    E --> F[application/ui_review_server.py]
-    F --> G[segment-mode review UI]
-    G --> H[reviewed_raw/*.jsonl]
-    G --> I[reviewed/*.csv]
+    C --> D1[process/process_segment_review_prep.py]
+    D1 --> E1[batch/segment_prep]
+    E1 --> F1[application/ui_review_server.py]
+    F1 --> G1[segment-mode review UI]
+    G1 --> H1[reviewed_raw/*.jsonl]
+    G1 --> I1[reviewed/*.csv]
+    C --> D2[process/process_human_stage_1_prep.py]
+    D2 --> E2[batch/human_stage_1_prep]
+    E2 --> F2[application/ui_human_stage_1_server.py]
+    F2 --> G2[human_stage_1 UI]
+    G2 --> H2[human_stage_1/coarse_labels_raw]
 ```
 
 ### 这条主线里每一步的角色
@@ -112,6 +128,13 @@ flowchart LR
     - `segment_prep_summary.json`
 - `application/ui_review_server.py`
   - 负责在线段级派单、代表帧加载、提交与逐帧展开
+- `process/process_human_stage_1_prep.py`
+  - 负责离线生成：
+    - `human_stage_1_prep/*.segments.json`
+    - `human_stage_1_prep/*.segment_frames.json`
+    - `human_stage_1_prep/human_stage_1_prep_summary.json`
+- `application/ui_human_stage_1_server.py`
+  - 负责在线第一轮粗标派单、历史推荐、coarse decision 提交与修改
 - `application/ui_admin_server.py`
   - 负责看全局统计与 annotator 活跃度
 - `process/README.md`
@@ -129,12 +152,20 @@ PYTHONPATH=codes .venv/bin/python codes/process/process_segment_review_prep.py \
   --batch-dir ./annotation/batch_20260413_v01
 ```
 
-### 2. 启动 review 服务
+### 2. 运行离线 human_stage_1 prep
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
-  --batch-dir ./annotation/batch_20260413_v01 \
+PYTHONPATH=codes .venv/bin/python codes/process/process_human_stage_1_prep.py \
+  --batch-dir ./annotation/batch_20260417_v01
+```
+
+### 3. 启动 human_stage_1 服务
+
+```bash
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/application/ui_human_stage_1_server.py \
+  --batch-dir ./annotation/batch_20260417_v01 \
   --host 127.0.0.1 \
   --port 10086
 ```
@@ -143,7 +174,23 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
 
 - `http://127.0.0.1:10086`
 
-### 3. 启动 admin 服务
+### 4. 启动 review 服务
+
+如果需要保留旧的段模式 review 服务，建议换一个空闲端口，避免和 `human_stage_1` 冲突。
+
+```bash
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260413_v01 \
+  --host 127.0.0.1 \
+  --port 10088
+```
+
+访问：
+
+- `http://127.0.0.1:10088`
+
+### 5. 启动 admin 服务
 
 ```bash
 cd /home/hrli/data_annotation
@@ -157,17 +204,18 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
 
 - `http://127.0.0.1:10087`
 
-### 4. 跑当前核心测试
+### 6. 跑当前核心测试
 
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python -m unittest discover -s codes/test
 ```
 
-### 5. JS 语法检查
+### 7. JS 语法检查
 
 ```bash
 cd /home/hrli/data_annotation
+node --check codes/application/ui_human_stage_1_web/app.js
 node --check codes/application/ui_review_web/app.js
 node --check codes/application/ui_admin_web/app.js
 ```
@@ -203,6 +251,34 @@ node --check codes/application/ui_admin_web/app.js
 
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 - [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+
+## human_stage_1 UI 该怎么理解
+
+`human_stage_1` 不是最终 bbox 标注界面，而是第一轮粗标分流界面。
+
+它当前的心智模型是：
+
+- 上面一排 `P1-P7` 槽位按钮
+- 下面只编辑当前槽位
+- 每个槽位只允许：
+  - `ai_match`
+  - `absent`
+  - `needs_manual`
+
+当前已经实现的辅助交互包括：
+
+1. 同视频历史多数票推荐，并在当前帧自动预选
+2. “其余设为不存在”按钮，只批量填 `absent`，不自动提交
+3. 左侧可折叠历史栏，可查看并修改自己已提交的 coarse decision
+4. AI 框三种视觉状态：
+   - 当前选中的已匹配框：橙色高亮
+   - 已匹配但当前没选中的框：实线
+   - 只有 track、尚未匹配到 pid 的框：深色虚线
+
+对外部部署来说，当前常见访问地址是：
+
+- 本地：`http://127.0.0.1:10086`
+- ngrok：`https://reda-acetometrical-endosporously.ngrok-free.dev/`
 
 ---
 

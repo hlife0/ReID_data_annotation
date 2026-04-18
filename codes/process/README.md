@@ -60,6 +60,39 @@
 - 接收代表帧或单帧标注
 - 展开成逐帧 `p1-p7` 结果
 
+### 4b. `process_human_stage_1_prep.py`
+
+这是第一轮粗标的离线准备入口。
+
+作用：
+
+- 先复用现有 first-pass 语义，得到：
+  - `stable_segment`
+  - `non_simple_single_frame`
+- 再在 first-pass 结果之上做 second-pass 的 `repair_window` 合并
+- 生成：
+  - `human_stage_1_prep/*.segments.json`
+  - `human_stage_1_prep/*.segment_frames.json`
+  - `human_stage_1_prep/human_stage_1_prep_summary.json`
+
+这一步是 `human_stage_1` 在线服务的唯一上游输入，不应该跳过。
+
+### 4c. `application/ui_human_stage_1_server.py`
+
+这是第一轮粗标在线服务入口。
+
+作用：
+
+- 读取 `human_stage_1_prep/`
+- 只返回单帧 coarse-labeling 任务
+- 提供历史多数票推荐与自动预选
+- 存储和修改：
+  - `ai_match`
+  - `absent`
+  - `needs_manual`
+
+它和 `ui_review_server.py` 是平行栈，不替代原 review 服务。
+
 ### 5. `application/ui_admin_server.py`
 
 这是在线 admin 服务入口。
@@ -86,6 +119,15 @@ process_prepare_capture_batch.py   (可选)
 -> application/ui_admin_server.py
 ```
 
+### 第一轮粗标闭环
+
+```text
+process_prepare_capture_batch.py   (可选)
+-> process_prelabel_batch.py
+-> process_human_stage_1_prep.py
+-> application/ui_human_stage_1_server.py
+```
+
 ## 其他脚本
 
 - `prepare_capture_lib.py`
@@ -102,5 +144,7 @@ process_prepare_capture_batch.py   (可选)
 ## 不要乱套的规则
 
 1. 不要先开 review 服务再忘了重算 `segment_prep/`
-2. 不要把 `process_final_annotation_batch.py` 当成段模式的前置步骤
-3. 不要把 `archive/` 里的旧脚本当成活跃入口
+2. 不要先开 `human_stage_1` 服务再忘了重算 `human_stage_1_prep/`
+3. `human_stage_1_prep.py` 必须建立在 first-pass 结果语义之上，不能跳过 first-pass 直接并 `repair_window`
+4. 不要把 `process_final_annotation_batch.py` 当成段模式的前置步骤
+5. 不要把 `archive/` 里的旧脚本当成活跃入口

@@ -7,11 +7,14 @@
 - `application/`
   - 在线服务与前端静态资源
   - 当前主入口：
+    - `application/ui_human_stage_1_server.py`
     - `application/ui_review_server.py`
     - `application/ui_admin_server.py`
     - `application/ui_review_result_server.py`
 - `process/`
   - 离线处理脚本与处理库
+  - 当前新增入口：
+    - `process/process_human_stage_1_prep.py`
   - 主线执行顺序见：
     - [`process/README.md`](/home/hrli/data_annotation/codes/process/README.md)
 - `test/`
@@ -31,8 +34,11 @@
 
 1. `process/process_prelabel_batch.py`
 2. `process/process_segment_review_prep.py`
-3. `application/ui_review_server.py`
-4. `application/ui_admin_server.py`
-5. `test/test_process_segment_review_prep.py`
-6. `test/test_segment_review_server.py`
-7. `test/test_ui_review_server.py`
+3. `process/process_human_stage_1_prep.py`
+4. `application/ui_human_stage_1_server.py`
+5. `application/ui_review_server.py`
+6. `application/ui_admin_server.py`
+7. `test/test_process_segment_review_prep.py`
+8. `test/test_process_human_stage_1_prep.py`
+9. `test/test_ui_human_stage_1_server.py`
+10. `test/test_segment_review_server.py`

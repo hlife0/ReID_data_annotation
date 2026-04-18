@@ -8,6 +8,16 @@
 
 **Tech Stack:** Python 3, `unittest`, SQLite, vanilla JS/HTML/CSS, existing `codes/process` and `codes/application` patterns
 
+**Implementation Status (`2026-04-19`):** This plan is now implemented on branch `human-stage-1`. The landed scope includes the original prep/server/web chain plus several UX additions that were folded in during execution:
+
+- compact `slotTabs + active slot` layout
+- history-based recommendation and auto-prefill
+- bulk “mark remaining absent”
+- left collapsible history sidebar with edit/save flow
+- persisted `selection_source` metadata for `ai_match`
+
+This document remains useful as the execution record, but the source of truth for current behavior is the code plus the refreshed spec in `docs/superpowers/specs/2026-04-17-first-pass-coarse-labeling-design.md`.
+
 ---
 
 ## File Structure

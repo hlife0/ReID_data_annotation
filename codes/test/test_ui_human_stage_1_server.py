@@ -257,6 +257,56 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertFalse(stable_payload.get("manual_draw_enabled", False))
         self.assertFalse(repair_payload.get("manual_draw_enabled", False))
 
+    def test_human_stage_1_server_returns_history_based_recommendations(self) -> None:
+        state = self._make_state()
+        state.submit_segment(
+            "annotator_history_a",
+            "sample_stage1_seg_000001",
+            {
+                "segment_id": "sample_stage1_seg_000001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "slot_decisions": [
+                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                    {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
+                ],
+            },
+        )
+        state.submit_segment(
+            "annotator_history_b",
+            "sample_stage1_seg_000002",
+            {
+                "segment_id": "sample_stage1_seg_000002",
+                "video_stem": "sample",
+                "frame_index": 5,
+                "slot_decisions": [
+                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                    {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
+                ],
+            },
+        )
+        state.submit_segment(
+            "annotator_history_c",
+            "sample_stage1_seg_000002",
+            {
+                "segment_id": "sample_stage1_seg_000002",
+                "video_stem": "sample",
+                "frame_index": 5,
+                "slot_decisions": [
+                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "12"},
+                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+                ],
+            },
+        )
+
+        payload = state.assign_next_segment("annotator_stage1")
+        rec_by_slot = {item["slot"]: item for item in payload["frame"]["recommendations"]}
+
+        self.assertEqual(rec_by_slot["p1"]["ai_track_id"], "11")
+        self.assertEqual(rec_by_slot["p1"]["vote_count"], 2)
+        self.assertEqual(rec_by_slot["p2"]["ai_track_id"], "12")
+        self.assertEqual(rec_by_slot["p2"]["vote_count"], 2)
+
     def test_human_stage_1_server_persists_ai_match_absent_needs_manual(self) -> None:
         state = self._make_state()
 
@@ -298,6 +348,95 @@ class HumanStage1ServerTests(unittest.TestCase):
                 ("p1", "ai_match", "11"),
                 ("p2", "absent", ""),
                 ("p3", "needs_manual", ""),
+            ],
+        )
+
+    def test_human_stage_1_server_lists_annotation_history_and_detail(self) -> None:
+        state = self._make_state()
+        result = state.submit_segment(
+            "annotator_stage1",
+            "sample_stage1_seg_000001",
+            {
+                "segment_id": "sample_stage1_seg_000001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "slot_decisions": [
+                    {
+                        "slot": "p1",
+                        "decision_type": "ai_match",
+                        "ai_track_id": "11",
+                        "selection_source": "recommended_confirmed",
+                    },
+                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+                ],
+            },
+        )
+
+        history = state.list_annotations_for_annotator("annotator_stage1")
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["annotation_id"], result["annotation_id"])
+        self.assertIn("P1:ai_match(11|recommended_confirmed)", history[0]["slots_summary"])
+        self.assertIn("P2:absent", history[0]["slots_summary"])
+
+        detail = state.annotation_detail("annotator_stage1", result["annotation_id"])
+        self.assertEqual(detail["annotation"]["annotation_id"], result["annotation_id"])
+        self.assertEqual(detail["frame"]["frame_index"], 2)
+        self.assertEqual(detail["annotation"]["slot_decisions"][0]["slot"], "p1")
+
+    def test_human_stage_1_server_updates_existing_annotation(self) -> None:
+        state = self._make_state()
+        result = state.submit_segment(
+            "annotator_stage1",
+            "sample_stage1_seg_000001",
+            {
+                "segment_id": "sample_stage1_seg_000001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "slot_decisions": [
+                    {
+                        "slot": "p1",
+                        "decision_type": "ai_match",
+                        "ai_track_id": "11",
+                        "selection_source": "manual_selected",
+                    },
+                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+                ],
+            },
+        )
+
+        update_result = state.update_annotation(
+            "annotator_stage1",
+            {
+                "annotation_id": result["annotation_id"],
+                "video_stem": "sample",
+                "frame_index": 2,
+                "slot_decisions": [
+                    {
+                        "slot": "p1",
+                        "decision_type": "ai_match",
+                        "ai_track_id": "11",
+                        "selection_source": "recommended_confirmed",
+                    },
+                    {"slot": "p2", "decision_type": "needs_manual", "ai_track_id": ""},
+                ],
+            },
+        )
+
+        self.assertEqual(update_result["annotation_id"], result["annotation_id"])
+        detail = state.annotation_detail("annotator_stage1", result["annotation_id"])
+        self.assertEqual(
+            [
+                (
+                    item["slot"],
+                    item["decision_type"],
+                    item["ai_track_id"],
+                    item["selection_source"],
+                )
+                for item in detail["annotation"]["slot_decisions"]
+            ],
+            [
+                ("p1", "ai_match", "11", "recommended_confirmed"),
+                ("p2", "needs_manual", "", "needs_manual"),
             ],
         )
 

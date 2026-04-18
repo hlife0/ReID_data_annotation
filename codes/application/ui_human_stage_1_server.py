@@ -6,6 +6,7 @@ import csv
 import json
 import sqlite3
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
@@ -21,6 +22,7 @@ from process import segment_prep_common as common
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SLOT_NAMES = [f"p{i}" for i in range(1, 8)]
 ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"]
+AI_SELECTION_SOURCES = {"recommended_confirmed", "manual_selected"}
 
 
 def _now_iso() -> str:
@@ -29,6 +31,33 @@ def _now_iso() -> str:
 
 def resolve_repo_path(path: Path) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
+def slot_summary_from_json(slot_decisions_json: str) -> str:
+    try:
+        decisions = json.loads(slot_decisions_json)
+    except Exception:
+        return ""
+    if not isinstance(decisions, list):
+        return ""
+    parts: List[str] = []
+    for item in decisions:
+        if not isinstance(item, dict):
+            continue
+        slot = str(item.get("slot", "")).strip().upper()
+        decision_type = str(item.get("decision_type", "")).strip()
+        ai_track_id = str(item.get("ai_track_id", "") or "").strip()
+        selection_source = str(item.get("selection_source", "") or "").strip()
+        if not slot or not decision_type:
+            continue
+        piece = f"{slot}:{decision_type}"
+        if ai_track_id:
+            piece += f"({ai_track_id}"
+            if selection_source:
+                piece += f"|{selection_source}"
+            piece += ")"
+        parts.append(piece)
+    return " | ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -185,6 +214,125 @@ class HumanStage1State:
             "submitted_slot_count": len(slot_decisions),
         }
 
+    def list_annotations_for_annotator(self, annotator_id: str) -> List[Dict[str, Any]]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    annotation_id,
+                    segment_id,
+                    segment_type,
+                    video_stem,
+                    frame_index,
+                    submitted_at,
+                    slot_decisions_json
+                FROM coarse_labels
+                WHERE annotator_id=?
+                ORDER BY submitted_at DESC, annotation_id DESC
+                """,
+                (annotator_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            {
+                "annotation_id": str(row["annotation_id"]),
+                "segment_id": str(row["segment_id"]),
+                "segment_type": str(row["segment_type"]),
+                "video_stem": str(row["video_stem"]),
+                "frame_index": int(row["frame_index"]),
+                "submitted_at": str(row["submitted_at"]),
+                "slot_decisions_json": str(row["slot_decisions_json"]),
+                "slots_summary": slot_summary_from_json(str(row["slot_decisions_json"])),
+            }
+            for row in rows
+        ]
+
+    def annotation_detail(self, annotator_id: str, annotation_id: str) -> Dict[str, Any]:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM coarse_labels
+                WHERE annotation_id=? AND annotator_id=?
+                """,
+                (annotation_id, annotator_id),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise ValueError("annotation not found for annotator")
+        segment = self.segment_lookup.get(str(row["segment_id"]))
+        if segment is None:
+            raise ValueError("segment not found")
+        payload = self._segment_payload(segment)
+        payload["annotation"] = {
+            "annotation_id": str(row["annotation_id"]),
+            "segment_id": str(row["segment_id"]),
+            "segment_type": str(row["segment_type"]),
+            "video_stem": str(row["video_stem"]),
+            "frame_index": int(row["frame_index"]),
+            "annotator_id": str(row["annotator_id"]),
+            "submitted_at": str(row["submitted_at"]),
+            "slot_decisions": json.loads(str(row["slot_decisions_json"])),
+        }
+        return payload
+
+    def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        annotation_id = str(payload.get("annotation_id", "")).strip()
+        if not annotation_id:
+            raise ValueError("annotation_id is required")
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT segment_id, segment_type, video_stem, frame_index
+                FROM coarse_labels
+                WHERE annotation_id=? AND annotator_id=?
+                """,
+                (annotation_id, annotator_id),
+            ).fetchone()
+            if row is None:
+                raise ValueError("annotation not found for annotator")
+        finally:
+            conn.close()
+        segment_id = str(row["segment_id"])
+        segment = self.segment_lookup.get(segment_id)
+        if segment is None:
+            raise ValueError("segment not found")
+        if str(payload.get("video_stem", "")).strip() != segment.video_stem:
+            raise ValueError("video_stem mismatch")
+        if int(payload.get("frame_index", 0)) != segment.representative_frame:
+            raise ValueError("frame_index mismatch")
+        slot_decisions = self._validate_slot_decisions(
+            video_stem=segment.video_stem,
+            frame_index=segment.representative_frame,
+            slot_decisions=payload.get("slot_decisions"),
+        )
+        serialized = json.dumps(slot_decisions, ensure_ascii=False)
+        conn = self._connect()
+        try:
+            conn.execute(
+                """
+                UPDATE coarse_labels
+                SET slot_decisions_json=?, submitted_at=?
+                WHERE annotation_id=? AND annotator_id=?
+                """,
+                (serialized, _now_iso(), annotation_id, annotator_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        raw_path = self.raw_dir / f"{annotation_id}.json"
+        if raw_path.exists():
+            raw_payload = json.loads(raw_path.read_text(encoding="utf-8"))
+            raw_payload["slot_decisions_json"] = serialized
+            raw_payload["submitted_at"] = _now_iso()
+            raw_path.write_text(json.dumps(raw_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"annotation_id": annotation_id, "updated_slot_count": len(slot_decisions)}
+
     def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
         frame_index = segment.representative_frame
         return {
@@ -206,6 +354,10 @@ class HumanStage1State:
                 "timestamp_ms": self.timestamp_lookup.get((segment.video_stem, frame_index), 0.0),
                 "ai_boxes": self.ai_boxes.get((segment.video_stem, frame_index), []),
                 "image_url": f"/api/frame_jpeg?video_stem={segment.video_stem}&frame_index={frame_index}",
+                "recommendations": self._build_recommendations(
+                    video_stem=segment.video_stem,
+                    ai_boxes=self.ai_boxes.get((segment.video_stem, frame_index), []),
+                ),
             },
             "slot_names": SLOT_NAMES,
             "allowed_decisions": ALLOWED_DECISIONS,
@@ -232,6 +384,7 @@ class HumanStage1State:
             slot = str(item.get("slot", "")).strip()
             decision_type = str(item.get("decision_type", "")).strip()
             ai_track_id = str(item.get("ai_track_id", "") or "").strip()
+            selection_source = str(item.get("selection_source", "") or "").strip()
             if slot not in SLOT_NAMES:
                 raise ValueError("invalid slot")
             if slot in seen_slots:
@@ -245,16 +398,22 @@ class HumanStage1State:
                     raise ValueError("ai_match must reference a visible AI track")
                 if ai_track_id in used_tracks:
                     raise ValueError("duplicate AI track assignment")
+                if selection_source and selection_source not in AI_SELECTION_SOURCES:
+                    raise ValueError("invalid ai selection_source")
+                if not selection_source:
+                    selection_source = "manual_selected"
                 used_tracks.add(ai_track_id)
             else:
                 if ai_track_id:
                     raise ValueError("non-ai decisions must not include ai_track_id")
+                selection_source = decision_type
             seen_slots.add(slot)
             validated.append(
                 {
                     "slot": slot,
                     "decision_type": decision_type,
                     "ai_track_id": ai_track_id,
+                    "selection_source": selection_source,
                 }
             )
         return validated
@@ -335,6 +494,89 @@ class HumanStage1State:
         segments.sort(key=lambda item: (item.video_stem, item.start_frame, item.end_frame, item.segment_id))
         return segments
 
+    def _build_recommendations(
+        self,
+        video_stem: str,
+        ai_boxes: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not ai_boxes:
+            return []
+
+        visible_track_ids = sorted({str(int(float(box["track_id"]))) for box in ai_boxes}, key=lambda item: int(item))
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT slot_decisions_json
+                FROM coarse_labels
+                WHERE video_stem=?
+                ORDER BY submitted_at ASC, annotation_id ASC
+                """,
+                (video_stem,),
+            ).fetchall()
+        finally:
+            conn.close()
+        if not rows:
+            return []
+
+        counts_by_slot: Dict[str, Counter[str]] = {slot: Counter() for slot in SLOT_NAMES}
+        for row in rows:
+            try:
+                decisions = json.loads(str(row["slot_decisions_json"]))
+            except Exception:
+                continue
+            if not isinstance(decisions, list):
+                continue
+            for item in decisions:
+                if not isinstance(item, dict):
+                    continue
+                slot = str(item.get("slot", "")).strip().lower()
+                if slot not in counts_by_slot:
+                    continue
+                if str(item.get("decision_type", "")).strip() != "ai_match":
+                    continue
+                ai_track_id = str(item.get("ai_track_id", "") or "").strip()
+                if not ai_track_id:
+                    continue
+                counts_by_slot[slot][ai_track_id] += 1
+
+        slot_rank = {slot: idx for idx, slot in enumerate(SLOT_NAMES)}
+        ranked_choices: Dict[str, List[Tuple[str, int]]] = {}
+        for slot in SLOT_NAMES:
+            visible_counts = [
+                (track_id, counts_by_slot[slot][track_id])
+                for track_id in visible_track_ids
+                if counts_by_slot[slot][track_id] > 0
+            ]
+            if not visible_counts:
+                continue
+            visible_counts.sort(key=lambda item: (-item[1], int(item[0])))
+            ranked_choices[slot] = visible_counts
+
+        ordered_slots = sorted(
+            ranked_choices,
+            key=lambda slot: (-ranked_choices[slot][0][1], slot_rank[slot]),
+        )
+        recommendations: List[Dict[str, Any]] = []
+        used_tracks: set[str] = set()
+        for slot in ordered_slots:
+            for track_id, vote_count in ranked_choices[slot]:
+                if track_id in used_tracks:
+                    continue
+                used_tracks.add(track_id)
+                total_votes = sum(counts_by_slot[slot].values())
+                recommendations.append(
+                    {
+                        "slot": slot,
+                        "ai_track_id": track_id,
+                        "vote_count": vote_count,
+                        "confidence": round(vote_count / total_votes, 3) if total_votes > 0 else 0.0,
+                        "reason": "history_majority",
+                    }
+                )
+                break
+        return recommendations
+
     def _init_database(self) -> None:
         conn = self._connect()
         try:
@@ -387,6 +629,12 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/next_segment":
             self._handle_next_segment(parsed)
             return
+        if parsed.path == "/api/my_annotations":
+            self._handle_my_annotations(parsed)
+            return
+        if parsed.path == "/api/annotation_detail":
+            self._handle_annotation_detail(parsed)
+            return
         if parsed.path == "/api/segment_detail":
             self._handle_segment_detail(parsed)
             return
@@ -399,6 +647,9 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/submit_segment":
             self._handle_submit_segment()
+            return
+        if parsed.path == "/api/update_annotation":
+            self._handle_update_annotation()
             return
         self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -423,6 +674,25 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
+    def _handle_my_annotations(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        annotator_id = str(query.get("annotator_id", ["annotator_demo"])[0]).strip() or "annotator_demo"
+        try:
+            annotations = self.server.state.list_annotations_for_annotator(annotator_id)
+            self._send_json({"annotations": annotations})
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_annotation_detail(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        annotator_id = str(query.get("annotator_id", ["annotator_demo"])[0]).strip() or "annotator_demo"
+        annotation_id = str(query.get("annotation_id", [""])[0]).strip()
+        try:
+            payload = self.server.state.annotation_detail(annotator_id, annotation_id)
+            self._send_json(payload)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
     def _handle_submit_segment(self) -> None:
         try:
             body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
@@ -433,6 +703,16 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
                 segment_id=str(payload.get("segment_id", "")).strip(),
                 payload=payload,
             )
+            self._send_json(result)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_update_annotation(self) -> None:
+        try:
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+            payload = json.loads(body.decode("utf-8"))
+            annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_demo"
+            result = self.server.state.update_annotation(annotator_id=annotator_id, payload=payload)
             self._send_json(result)
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)

@@ -71,6 +71,29 @@
 
 上述后半段只保留占位语义，不作为当前优先实现项。
 
+## Current Implementation Status
+
+截至 `2026-04-19`，本设计的前半段已经有一套可运行实现，重点包括：
+
+- `process_human_stage_1_prep.py`
+  - 先复用现有 first-pass
+  - 再导出 `human_stage_1_prep/`
+- `ui_human_stage_1_server.py`
+  - 只读取 `human_stage_1_prep/`
+  - 已支持历史记录查询、详情和修改
+- `ui_human_stage_1_web/`
+  - 已切成紧凑的槽位按钮 + 当前槽位决策区
+  - 不允许手动画框
+
+当前实现比最初骨架多出的行为有：
+
+- 同视频历史多数票推荐，并在当前帧自动预选
+- “其余设为不存在”按钮
+- 左侧可折叠历史栏，可修改自己已提交的 coarse decision
+- `ai_match` 额外记录选择来源：
+  - `recommended_confirmed`
+  - `manual_selected`
+
 ## Recommendation
 
 采用“两层人工生产”的主线：
@@ -356,6 +379,21 @@ annotation/batch_<...>/
 
 页面不再出现第一轮手动画框入口。
 
+当前实现里的 UI 已经进一步收紧为：
+
+- 上方一排 `P1-P7` 槽位按钮，按钮上直接显示当前选择
+- 下方只编辑当前槽位
+- AI 框当前有三种视觉状态：
+  - 当前选中的已匹配框：橙色高亮
+  - 已匹配但当前没选中的框：实线
+  - 仅有 track、尚未匹配到 pid 的框：深色虚线
+
+同时保留：
+
+- 左侧可折叠历史栏
+- 当前 annotator 自己的 coarse-label 历史与修改入口
+- “其余设为不存在”批量按钮
+
 ### `human_stage_1` Server Responsibilities
 
 `ui_human_stage_1_server.py` 只负责：
@@ -365,6 +403,11 @@ annotation/batch_<...>/
 - 返回当前单帧粗标视图
 - 接收 coarse decision
 - 存储第一轮结果
+
+当前实现还额外负责：
+
+- 基于同视频历史 coarse labels 统计 `slot -> track_id` 多数票推荐
+- 返回当前 annotator 的提交历史、单条详情与修改接口
 
 它不负责：
 
@@ -385,6 +428,11 @@ annotation/batch_<...>/
   - `needs_manual`
 - `ai_track_id`
   - 仅在 `ai_match` 时存在
+- `selection_source`
+  - `recommended_confirmed`
+  - `manual_selected`
+  - `absent`
+  - `needs_manual`
 
 同时记录：
 
