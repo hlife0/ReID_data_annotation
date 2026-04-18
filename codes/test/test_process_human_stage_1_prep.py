@@ -157,7 +157,16 @@ class HumanStage1PrepTests(unittest.TestCase):
         source_ids = repair_window["source_segment_ids"]
         self.assertEqual(len(source_ids), 3)
         source_lookup = {item["segment_id"]: item for item in first_pass}
-        self.assertEqual(set(source_ids), set(source_lookup))
+        expected_source_ids = {
+            item["segment_id"]
+            for item in first_pass
+            if (item["segment_type"], item["start_frame"], item["end_frame"]) in {
+                ("non_simple_single_frame", 3, 3),
+                ("stable_segment", 4, 4),
+                ("non_simple_single_frame", 5, 5),
+            }
+        }
+        self.assertEqual(set(source_ids), expected_source_ids)
         self.assertEqual(
             [
                 (source_lookup[item]["segment_type"], source_lookup[item]["start_frame"], source_lookup[item]["end_frame"])
