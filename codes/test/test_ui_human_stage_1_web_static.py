@@ -23,12 +23,11 @@ class HumanStage1WebStaticTests(unittest.TestCase):
 
         self.assertNotIn("draw_new_box", html)
         self.assertNotIn("manual_draw", html)
-        self.assertNotIn("bbox_x", html)
-        self.assertNotIn("bbox_y", html)
+        self.assertNotIn('type="number"', html)
         self.assertNotIn("drawNewBox", js)
         self.assertNotIn("manual_draw", js)
-        self.assertNotIn("bbox_x", js)
-        self.assertNotIn("bbox_y", js)
+        self.assertNotIn('getElementById("activeX")', js)
+        self.assertNotIn('getElementById("activeY")', js)
 
 
 if __name__ == "__main__":

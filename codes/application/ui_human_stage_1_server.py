@@ -8,9 +8,13 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from urllib.parse import parse_qs, urlparse
 
+from application.ui_review_server import VideoFrameReader
 from process import segment_prep_common as common
 
 
@@ -64,9 +68,11 @@ class HumanStage1State:
 
         self.video_paths: Dict[str, Path] = {}
         self.timestamp_paths: Dict[str, Path] = {}
+        self.timestamp_lookup: Dict[Tuple[str, int], float] = {}
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
         self.segment_pool: List[SegmentRecord] = []
         self.segment_lookup: Dict[str, SegmentRecord] = {}
+        self.reader: VideoFrameReader | None = None
 
     def initialize(self) -> None:
         self.stage1_dir.mkdir(parents=True, exist_ok=True)
@@ -78,11 +84,18 @@ class HumanStage1State:
             if self.assignment_log_path.exists():
                 self.assignment_log_path.unlink()
         self.video_paths, self.timestamp_paths = self._load_manifest_assets()
+        self.timestamp_lookup = self._load_frame_timestamps()
         self.ai_boxes = self._load_ai_boxes()
         self.segment_pool = self._load_segment_pool()
         self.segment_lookup = {segment.segment_id: segment for segment in self.segment_pool}
         self._init_database()
         self._init_assignment_log()
+        self.reader = VideoFrameReader(self.video_paths)
+
+    def close(self) -> None:
+        if self.reader is not None:
+            self.reader.close()
+            self.reader = None
 
     def assign_next_segment(self, annotator_id: str) -> Dict[str, Any]:
         completed_segment_ids = self._completed_segment_ids_for_annotator(annotator_id)
@@ -190,7 +203,9 @@ class HumanStage1State:
             "frame": {
                 "video_stem": segment.video_stem,
                 "frame_index": frame_index,
+                "timestamp_ms": self.timestamp_lookup.get((segment.video_stem, frame_index), 0.0),
                 "ai_boxes": self.ai_boxes.get((segment.video_stem, frame_index), []),
+                "image_url": f"/api/frame_jpeg?video_stem={segment.video_stem}&frame_index={frame_index}",
             },
             "slot_names": SLOT_NAMES,
             "allowed_decisions": ALLOWED_DECISIONS,
@@ -286,6 +301,18 @@ class HumanStage1State:
                 ]
         return ai_boxes
 
+    def _load_frame_timestamps(self) -> Dict[Tuple[str, int], float]:
+        timestamp_lookup: Dict[Tuple[str, int], float] = {}
+        for video_stem, csv_path in self.timestamp_paths.items():
+            with csv_path.open("r", newline="", encoding="utf-8") as f:
+                rows = csv.DictReader(f)
+                for row in rows:
+                    try:
+                        timestamp_lookup[(video_stem, int(row["frame_index"]))] = float(row["timestamp_ms"])
+                    except Exception:
+                        continue
+        return timestamp_lookup
+
     def _load_segment_pool(self) -> List[SegmentRecord]:
         segments: List[SegmentRecord] = []
         for path in sorted(self.stage1_prep_dir.glob("*.segments.json")):
@@ -346,6 +373,117 @@ class HumanStage1State:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def read_frame_jpeg(self, video_stem: str, frame_index: int) -> bytes:
+        if self.reader is None:
+            raise ValueError("frame reader not initialized")
+        return self.reader.read_jpeg(video_stem, frame_index)
+
+
+class HumanStage1RequestHandler(BaseHTTPRequestHandler):
+    server: "HumanStage1HTTPServer"
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/next_segment":
+            self._handle_next_segment(parsed)
+            return
+        if parsed.path == "/api/segment_detail":
+            self._handle_segment_detail(parsed)
+            return
+        if parsed.path == "/api/frame_jpeg":
+            self._handle_frame_jpeg(parsed)
+            return
+        self._serve_static(parsed.path)
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/submit_segment":
+            self._handle_submit_segment()
+            return
+        self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
+        return
+
+    def _handle_next_segment(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        annotator_id = str(query.get("annotator_id", ["annotator_demo"])[0]).strip() or "annotator_demo"
+        try:
+            payload = self.server.state.assign_next_segment(annotator_id)
+            self._send_json(payload)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_segment_detail(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        segment_id = str(query.get("segment_id", [""])[0]).strip()
+        try:
+            payload = self.server.state.segment_detail(segment_id)
+            self._send_json(payload)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_submit_segment(self) -> None:
+        try:
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+            payload = json.loads(body.decode("utf-8"))
+            annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_demo"
+            result = self.server.state.submit_segment(
+                annotator_id=annotator_id,
+                segment_id=str(payload.get("segment_id", "")).strip(),
+                payload=payload,
+            )
+            self._send_json(result)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_frame_jpeg(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        video_stem = str(query.get("video_stem", [""])[0]).strip()
+        frame_index = int(query.get("frame_index", ["0"])[0])
+        try:
+            data = self.server.state.read_frame_jpeg(video_stem, frame_index)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _serve_static(self, request_path: str) -> None:
+        relative = request_path.lstrip("/") or "index.html"
+        path = (self.server.static_dir / relative).resolve()
+        if not path.exists() or self.server.static_dir not in path.parents and path != self.server.static_dir / "index.html":
+            self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        content_type = "text/html; charset=utf-8"
+        if path.suffix == ".js":
+            content_type = "application/javascript; charset=utf-8"
+        elif path.suffix == ".css":
+            content_type = "text/css; charset=utf-8"
+        data = path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_json(self, payload: Dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+class HumanStage1HTTPServer(ThreadingHTTPServer):
+    def __init__(self, server_address: Tuple[str, int], state: HumanStage1State) -> None:
+        self.state = state
+        self.static_dir = state.static_dir
+        super().__init__(server_address, HumanStage1RequestHandler)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Serve human stage 1 coarse-labeling UI")
@@ -357,6 +495,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--reset-storage", action="store_true")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=10089)
     return parser.parse_args()
 
 
@@ -369,17 +509,25 @@ def main() -> None:
         reset_storage=args.reset_storage,
     )
     state.initialize()
-    print(
-        json.dumps(
-            {
-                "batch_dir": str(args.batch_dir.resolve()),
-                "segment_count": len(state.segment_pool),
-                "db_path": str(state.db_path),
-            },
-            ensure_ascii=False,
-            indent=2,
+    server = HumanStage1HTTPServer((args.host, args.port), state)
+    try:
+        print(
+            json.dumps(
+                {
+                    "batch_dir": str(args.batch_dir.resolve()),
+                    "segment_count": len(state.segment_pool),
+                    "db_path": str(state.db_path),
+                    "host": args.host,
+                    "port": args.port,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
         )
-    )
+        server.serve_forever()
+    finally:
+        server.server_close()
+        state.close()
 
 
 if __name__ == "__main__":

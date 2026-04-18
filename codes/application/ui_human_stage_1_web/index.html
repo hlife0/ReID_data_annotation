@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Human Stage 1</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">human_stage_1</p>
+          <h1>第一轮粗标</h1>
+          <p class="hero-copy">每个槽位只允许 `ai_match` / `absent` / `needs_manual`。</p>
+        </div>
+        <div class="hero-actions">
+          <label class="annotator-field">
+            <span>Annotator</span>
+            <input id="annotatorId" type="text" value="annotator_demo" />
+          </label>
+          <button id="nextBtn" class="btn subtle" type="button">下一段</button>
+          <button id="submitBtn" class="btn" type="button">提交</button>
+        </div>
+      </header>
+
+      <section class="status-grid">
+        <div><span class="label">视频</span><strong id="videoStem">-</strong></div>
+        <div><span class="label">段</span><strong id="segmentId">-</strong></div>
+        <div><span class="label">类型</span><strong id="segmentType">-</strong></div>
+        <div><span class="label">帧</span><strong id="frameIndex">-</strong></div>
+      </section>
+
+      <main class="layout">
+        <section class="frame-panel">
+          <div class="frame-head">
+            <h2>当前帧</h2>
+            <p id="frameMeta">-</p>
+          </div>
+          <div class="frame-stage">
+            <img id="frameImage" alt="Stage 1 frame" />
+            <div id="aiOverlay" class="ai-overlay"></div>
+          </div>
+          <div id="aiLegend" class="ai-legend"></div>
+        </section>
+
+        <section class="slot-panel">
+          <div class="slot-panel-head">
+            <h2>槽位决策</h2>
+            <p>点击 AI 框、标记 `absent`，或者标记 `needs_manual`。</p>
+          </div>
+          <div id="slotList" class="slot-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
