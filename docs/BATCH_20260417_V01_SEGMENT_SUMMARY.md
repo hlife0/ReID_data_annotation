@@ -164,7 +164,6 @@ compression_multiple = frame_count / segment_count
 
 - `frames = 109634`
 - `annotations = 0`
-- `assignments = 0`
 - `segment_reviews = 0`
 - `frame_counts` 全部为 `0`
 

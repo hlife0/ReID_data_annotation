@@ -6,10 +6,10 @@
 
 - [legacy_frame_mode/](/home/hrli/data_annotation/docs/archive/legacy_frame_mode)
   - 旧逐帧/旧双人主线的历史材料
+- [legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
+  - 已从活跃仓库下线的一次性标注代码对应文档与数据库说明
 - [legacy_segment_mode/](/home/hrli/data_annotation/docs/archive/legacy_segment_mode)
   - 旧问题池、旧 issue mode、旧段模式实验材料
-- [legacy_downstream/](/home/hrli/data_annotation/docs/archive/legacy_downstream)
-  - 已脱离当前主线的旧下游分析、旧复审结果 UI、旧最终导出需求
 - [historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
   - 旧批次或一次性分析报告
 

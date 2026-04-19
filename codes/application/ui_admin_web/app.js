@@ -23,7 +23,6 @@ const I18N = {
     query_frame_detail: "查询帧明细",
     th_annotator: "Annotator",
     th_annotation_count: "标注数",
-    th_assignment_count: "分配数",
     th_videos_covered: "覆盖视频数",
     th_latest_submitted: "最近提交时间",
     th_annotator_lower: "annotator",
@@ -72,7 +71,6 @@ const I18N = {
     query_frame_detail: "Query Frame Detail",
     th_annotator: "Annotator",
     th_annotation_count: "Annotations",
-    th_assignment_count: "Assignments",
     th_videos_covered: "Videos Covered",
     th_latest_submitted: "Latest Submitted",
     th_annotator_lower: "annotator",
@@ -259,7 +257,7 @@ function renderAnnotatorTable(rows) {
   state.cachedAnnotators = rows;
   refs.annotatorBody.innerHTML = "";
   if (!rows || rows.length === 0) {
-    refs.annotatorBody.innerHTML = `<tr><td colspan="5">${t("empty_no_records")}</td></tr>`;
+    refs.annotatorBody.innerHTML = `<tr><td colspan="4">${t("empty_no_records")}</td></tr>`;
     return;
   }
 
@@ -268,7 +266,6 @@ function renderAnnotatorTable(rows) {
     tr.innerHTML = `
       <td>${row.annotator_id}</td>
       <td>${row.annotation_count}</td>
-      <td>${row.assignment_count}</td>
       <td>${row.videos_covered}</td>
       <td>${row.latest_submitted_at || t("na")}</td>
     `;

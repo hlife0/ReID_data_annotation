@@ -104,12 +104,6 @@
 - 查看段统计
 - 查看 annotator 活跃度与提交结果
 
-### 6. `process_final_annotation_batch.py`（下游）
-
-这是下游导出脚本，不属于“先把段模式跑起来”的最小闭环。
-
-只有在前面的 segment review 主线稳定后，才继续对齐和使用它。
-
 ## 最常见的正确顺序
 
 ```text
@@ -145,17 +139,16 @@ process_prelabel_batch.py
   - `process_prepare_capture_batch.py` 的辅助库
 - `segment_prep_common.py`
   - `process_segment_review_prep.py` 的公共读取与几何工具
-- `process_annotation_analysis.py`
-  - 下游一致性分析脚本
 - `process_imu_mapping_batch.py`
   - IMU 映射辅助脚本
-- `render_final_annotations_video.py`
-  - 最终导出结果的视频可视化脚本
+
+旧的一次性标注下游脚本已归档到：
+
+- `codes/archive/legacy_one_shot_annotation/process/`
 
 ## 不要乱套的规则
 
 1. 不要先开 review 服务再忘了重算 `segment_prep/`
 2. 不要先开 `human_stage_1` 服务再忘了重算 `human_stage_1_prep/`
 3. `human_stage_1_prep.py` 必须建立在 first-pass 结果语义之上，不能跳过 first-pass 直接并 `repair_window`
-4. 不要把 `process_final_annotation_batch.py` 当成段模式的前置步骤
-5. 不要把 `archive/` 里的旧脚本当成活跃入口
+4. 不要把 `archive/` 里的旧脚本当成活跃入口

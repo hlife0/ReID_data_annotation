@@ -78,16 +78,7 @@
 
 ## 4. 当前 review UI 的工作模型
 
-### 4.1 已保留的 frame-mode
-
-系统仍然保留：
-
-- `next_frame`
-- `submit`
-
-所以旧的逐帧模式没有被完全删除，但它现在只是兼容入口，不是当前主线。
-
-### 4.2 当前推荐的 segment-mode
+### 4.1 当前支持的 segment-mode
 
 当前更推荐用：
 
@@ -152,27 +143,22 @@
 
 ## 7. 当前后端接口
 
-### 7.1 frame-mode
-
-- `POST /api/next_frame`
-- `POST /api/submit`
-
-### 7.2 segment-mode 读取
+### 7.1 segment-mode 读取
 
 - `POST /api/next_segment`
 - `GET /api/segment_detail`
 
-### 7.3 segment-mode 提交
+### 7.2 segment-mode 提交
 
 - `POST /api/submit_segment`
 
-### 7.4 历史与修订
+### 7.3 历史与修订
 
 - `GET /api/my_annotations`
 - `GET /api/annotation_detail`
 - `POST /api/update_annotation`
 
-### 7.5 导出
+### 7.4 导出
 
 - `POST /api/export`
 

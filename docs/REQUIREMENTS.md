@@ -52,8 +52,8 @@
 
 ### 其他增强与下游
 
-- 旧下游分析、旧复审结果 UI 和旧最终导出需求，现已归档到：
-  - [archive/legacy_downstream/](/home/hrli/data_annotation/docs/archive/legacy_downstream)
+- 旧一次性标注下游分析、旧复审结果 UI 和旧最终导出需求，现已归档到：
+  - [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
 - 旧批次 IMU 分析报告，现已归档到：
   - [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
 

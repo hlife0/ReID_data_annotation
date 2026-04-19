@@ -213,14 +213,6 @@ class AdminState:
                 """
             ).fetchall()
 
-            assignment_rows = conn.execute(
-                """
-                SELECT annotator_id, COUNT(*) AS assignment_count
-                FROM assignments
-                GROUP BY annotator_id
-                """
-            ).fetchall()
-
             recent_rows = conn.execute(
                 """
                 SELECT
@@ -244,28 +236,13 @@ class AdminState:
             merged[aid] = {
                 "annotator_id": aid,
                 "annotation_count": int(row["annotation_count"] or 0),
-                "assignment_count": 0,
                 "videos_covered": int(row["videos_covered"] or 0),
                 "latest_submitted_at": row["latest_submitted_at"] or "",
             }
 
-        for row in assignment_rows:
-            aid = str(row["annotator_id"])
-            merged.setdefault(
-                aid,
-                {
-                    "annotator_id": aid,
-                    "annotation_count": 0,
-                    "assignment_count": 0,
-                    "videos_covered": 0,
-                    "latest_submitted_at": "",
-                },
-            )
-            merged[aid]["assignment_count"] = int(row["assignment_count"] or 0)
-
         annotators = sorted(
             merged.values(),
-            key=lambda x: (-int(x["annotation_count"]), -int(x["assignment_count"]), x["annotator_id"]),
+            key=lambda x: (-int(x["annotation_count"]), x["annotator_id"]),
         )
 
         recent_annotations = [

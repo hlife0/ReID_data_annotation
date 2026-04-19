@@ -4,11 +4,12 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
 import sqlite3
 import threading
 import time
 import uuid
-from collections import Counter, OrderedDict
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from http import HTTPStatus
@@ -32,6 +33,16 @@ VALID_SLOT_SOURCES = {"ai", "manual_draw", "manual_param", "absent", "occluded",
 
 FRAME_POOL_COLUMNS = ["video_stem", "frame_index", "timestamp_ms"]
 COUNT_COLUMNS = ["video_stem", "frame_index", "timestamp_ms", "annotation_count"]
+ASSIGNMENT_COLUMNS = [
+    "assignment_id",
+    "assigned_at",
+    "annotator_id",
+    "video_stem",
+    "frame_index",
+    "timestamp_ms",
+    "count_before",
+    "reason",
+]
 REVIEWED_COLUMNS = [
     "annotation_id",
     "video_stem",
@@ -221,12 +232,14 @@ class AnnotationState:
         self.manifest_path = self.batch_dir / "manifests" / "annotation_tasks.csv"
         self.frame_pool_path = self.ui_task_dir / "frame_pool.csv"
         self.count_path = self.ui_task_dir / "frame_annotation_counts.csv"
+        self.assignment_log_path = self.ui_task_dir / "assignment_log.csv"
         self.db_path = self.ui_task_dir / "ui_review.sqlite3"
 
         self.logger = RunLogger(
             run_log_path=self.logs_dir / "run.log",
             error_log_path=self.logs_dir / "errors.log",
         )
+        self._rng = random.Random(seed)
         self._lock = threading.Lock()
         self.reset_storage = reset_storage
         self.frame_cache_dir = frame_cache_dir
@@ -246,6 +259,8 @@ class AnnotationState:
         self._frame_cache: OrderedDict[Tuple[str, int], bytes] = OrderedDict()
         self._frame_cache_lock = threading.Lock()
         self._frame_cache_max = int(max(0, frame_cache_max))
+        self._dispatch_queue: deque[Tuple[str, int]] = deque()
+        self._dispatch_bucket_count: int | None = None
         self._dispatch_generation = 0
         self._segment_dispatch_index = 0
 
@@ -269,7 +284,10 @@ class AnnotationState:
         self._init_review_files()
         self._init_database()
         self._sync_counts_csv_from_db()
+        self._sync_assignment_log_csv_from_db()
         self.reader = VideoFrameReader(self.video_paths, jpeg_quality=self.frame_cache_quality)
+        self._dispatch_queue.clear()
+        self._dispatch_bucket_count = None
         self._dispatch_generation = 0
         self._segment_dispatch_index = 0
         if self.frame_cache_dir is not None:
@@ -284,6 +302,35 @@ class AnnotationState:
     def close(self) -> None:
         if self.reader is not None:
             self.reader.close()
+
+    def assign_next_frame(self, annotator_id: str, reason: str) -> Dict[str, Any]:
+        with self._lock:
+            conn = self._connect()
+            assignment_csv_row: Dict[str, Any] | None = None
+            prefetch_frames: List[Dict[str, Any]] = []
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                picked_row = self._pick_next_frame_row(conn)
+                assignment, assignment_csv_row = self._create_and_insert_assignment(
+                    conn=conn,
+                    picked_row=picked_row,
+                    annotator_id=annotator_id,
+                    reason=reason,
+                )
+                prefetch_frames = self._build_prefetch_frames(conn, limit=5)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            if assignment_csv_row is not None:
+                self._append_assignment_csv_row(assignment_csv_row)
+            return {
+                "frame": assignment,
+                "prefetch_frames": prefetch_frames,
+            }
 
     def assign_next_segment(self, annotator_id: str) -> Dict[str, Any]:
         with self._lock:
@@ -407,6 +454,88 @@ class AnnotationState:
                 },
                 "submitted_frame_count": len(frame_records),
                 "next_segment": next_segment,
+            }
+
+    def submit_and_assign_next(
+        self,
+        annotator_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        with self._lock:
+            annotation_record = self._validate_and_build_record(annotator_id, payload)
+            key = (annotation_record["video_stem"], int(annotation_record["frame_index"]))
+            if key not in self.frame_lookup:
+                raise ValueError("frame does not exist in frame pool, cannot submit annotation")
+
+            count_after_submit = 0
+            next_assignment: Dict[str, Any] | None = None
+            next_assignment_csv_row: Dict[str, Any] | None = None
+            prefetch_frames: List[Dict[str, Any]] = []
+
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    """
+                    SELECT annotation_count
+                    FROM frame_counts
+                    WHERE video_stem=? AND frame_index=?
+                    """,
+                    (key[0], key[1]),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("frame does not exist in database")
+                before = int(row["annotation_count"])
+
+                self._insert_annotation(conn, annotation_record)
+                self._update_track_person_stats(conn, annotation_record)
+                conn.execute(
+                    """
+                    UPDATE frame_counts
+                    SET annotation_count = annotation_count + 1
+                    WHERE video_stem=? AND frame_index=?
+                    """,
+                    (key[0], key[1]),
+                )
+                count_after_submit = before + 1
+
+                picked_row = self._pick_next_frame_row(conn)
+                next_assignment, next_assignment_csv_row = self._create_and_insert_assignment(
+                    conn=conn,
+                    picked_row=picked_row,
+                    annotator_id=annotator_id,
+                    reason="after_submit",
+                )
+                prefetch_frames = self._build_prefetch_frames(conn, limit=5)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+            self._append_jsonl_record(annotation_record)
+            self._append_reviewed_csv(annotation_record)
+            if next_assignment_csv_row is not None:
+                self._append_assignment_csv_row(next_assignment_csv_row)
+            self._sync_counts_csv_from_db()
+
+            self.logger.info(
+                "submit ok "
+                f"annotation_id={annotation_record['annotation_id']} "
+                f"video_stem={annotation_record['video_stem']} "
+                f"frame_index={annotation_record['frame_index']} "
+                f"count_after={count_after_submit}"
+            )
+            return {
+                "submitted": {
+                    "annotation_id": annotation_record["annotation_id"],
+                    "video_stem": annotation_record["video_stem"],
+                    "frame_index": annotation_record["frame_index"],
+                    "count_after_submit": count_after_submit,
+                },
+                "next_frame": next_assignment,
+                "prefetch_frames": prefetch_frames,
             }
 
     def export_reviewed_csvs(self) -> Dict[str, int]:
@@ -634,6 +763,7 @@ class AnnotationState:
             raise RuntimeError("state not initialized")
         width, height = self.reader.get_dimensions(stem)
         frame = {
+            "assignment_id": "",
             "video_stem": stem,
             "frame_index": frame_index,
             "timestamp_ms": _safe_float(row["timestamp_ms"]),
@@ -804,6 +934,7 @@ class AnnotationState:
     def _reset_storage_artifacts(self) -> None:
         self.db_path.unlink(missing_ok=True)
         self.count_path.unlink(missing_ok=True)
+        self.assignment_log_path.unlink(missing_ok=True)
         for stem in self.video_stems or DEFAULT_TARGET_VIDEO_STEMS:
             (self.reviewed_raw_dir / f"{stem}.frame_records.jsonl").unlink(missing_ok=True)
             (self.reviewed_dir / f"{stem}.reviewed.csv").unlink(missing_ok=True)
@@ -832,6 +963,7 @@ class AnnotationState:
                     DROP TABLE IF EXISTS segment_reviews;
                     DROP TABLE IF EXISTS track_person_stats;
                     DROP TABLE IF EXISTS annotations;
+                    DROP TABLE IF EXISTS assignments;
                     DROP TABLE IF EXISTS frame_counts;
                     DROP TABLE IF EXISTS frames;
                     """
@@ -854,6 +986,22 @@ class AnnotationState:
                         REFERENCES frames(video_stem, frame_index)
                         ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS assignments (
+                    assignment_id TEXT PRIMARY KEY,
+                    assigned_at TEXT NOT NULL,
+                    annotator_id TEXT NOT NULL,
+                    video_stem TEXT NOT NULL,
+                    frame_index INTEGER NOT NULL,
+                    timestamp_ms REAL NOT NULL,
+                    count_before INTEGER NOT NULL,
+                    reason TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_assignments_annotator
+                ON assignments (annotator_id);
+                CREATE INDEX IF NOT EXISTS idx_assignments_frame
+                ON assignments (video_stem, frame_index);
 
                 CREATE TABLE IF NOT EXISTS annotations (
                     annotation_id TEXT PRIMARY KEY,
@@ -1751,6 +1899,7 @@ class AnnotationState:
         rec = self.frame_lookup[key]
         width, height = self.reader.get_dimensions(stem)
         return {
+            "assignment_id": "",
             "video_stem": stem,
             "frame_index": frame_index,
             "timestamp_ms": _safe_float(rec.timestamp_ms),
@@ -1874,6 +2023,183 @@ class AnnotationState:
                     }
                 )
 
+    def _sync_assignment_log_csv_from_db(self) -> None:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    assignment_id,
+                    assigned_at,
+                    annotator_id,
+                    video_stem,
+                    frame_index,
+                    timestamp_ms,
+                    count_before,
+                    reason
+                FROM assignments
+                ORDER BY assigned_at ASC, assignment_id ASC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        with self.assignment_log_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ASSIGNMENT_COLUMNS)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(
+                    {
+                        "assignment_id": row["assignment_id"],
+                        "assigned_at": row["assigned_at"],
+                        "annotator_id": row["annotator_id"],
+                        "video_stem": row["video_stem"],
+                        "frame_index": int(row["frame_index"]),
+                        "timestamp_ms": f"{float(row['timestamp_ms']):.3f}",
+                        "count_before": int(row["count_before"]),
+                        "reason": row["reason"],
+                    }
+                )
+
+    def _append_assignment_csv_row(self, row: Dict[str, Any]) -> None:
+        file_exists = self.assignment_log_path.exists()
+        with self.assignment_log_path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ASSIGNMENT_COLUMNS)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow({k: row.get(k, "") for k in ASSIGNMENT_COLUMNS})
+
+    def _resolve_active_bucket_count(self, conn: sqlite3.Connection) -> int:
+        row = conn.execute(
+            """
+            SELECT
+                SUM(CASE WHEN annotation_count = 0 THEN 1 ELSE 0 END) AS bucket_0,
+                SUM(CASE WHEN annotation_count = 1 THEN 1 ELSE 0 END) AS bucket_1,
+                SUM(CASE WHEN annotation_count = 2 THEN 1 ELSE 0 END) AS bucket_2,
+                MIN(annotation_count) AS min_count
+            FROM frame_counts
+            """
+        ).fetchone()
+        if row is None or row["min_count"] is None:
+            raise RuntimeError("frame pool is empty")
+        if int(row["bucket_0"] or 0) > 0:
+            return 0
+        if int(row["bucket_1"] or 0) > 0:
+            return 1
+        if int(row["bucket_2"] or 0) > 0:
+            return 2
+        return int(row["min_count"])
+
+    def _list_bucket_candidate_keys(
+        self,
+        conn: sqlite3.Connection,
+        bucket_count: int,
+    ) -> List[Tuple[str, int]]:
+        rows = conn.execute(
+            """
+            SELECT video_stem, frame_index
+            FROM frame_counts
+            WHERE annotation_count = ?
+            ORDER BY video_stem ASC, frame_index ASC
+            """,
+            (bucket_count,),
+        ).fetchall()
+        return [(str(r["video_stem"]), int(r["frame_index"])) for r in rows]
+
+    def _rebuild_dispatch_queue(self, conn: sqlite3.Connection, bucket_count: int) -> None:
+        keys = self._list_bucket_candidate_keys(conn, bucket_count)
+        if not keys:
+            raise RuntimeError(f"dispatch bucket {bucket_count} has no candidates")
+        self._rng.shuffle(keys)
+        self._dispatch_queue = deque(keys)
+        self._dispatch_bucket_count = bucket_count
+        self._dispatch_generation += 1
+        self.logger.info(
+            "dispatch queue rebuilt "
+            f"generation={self._dispatch_generation} "
+            f"bucket={bucket_count} size={len(keys)}"
+        )
+
+    def _pop_next_valid_dispatch_row(
+        self,
+        conn: sqlite3.Connection,
+        bucket_count: int,
+    ) -> sqlite3.Row | None:
+        while self._dispatch_queue:
+            stem, frame_index = self._dispatch_queue.popleft()
+            row = conn.execute(
+                """
+                SELECT video_stem, frame_index, annotation_count
+                FROM frame_counts
+                WHERE video_stem=? AND frame_index=?
+                """,
+                (stem, frame_index),
+            ).fetchone()
+            if row is None:
+                continue
+            if int(row["annotation_count"]) != bucket_count:
+                continue
+            return row
+        return None
+
+    def _build_prefetch_frames(
+        self,
+        conn: sqlite3.Connection,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        if limit <= 0 or self.reader is None or self._dispatch_bucket_count is None:
+            return []
+
+        prefetch_frames: List[Dict[str, Any]] = []
+        dim_cache: Dict[str, Tuple[int, int]] = {}
+        bucket_count = int(self._dispatch_bucket_count)
+        for stem, frame_index in list(self._dispatch_queue):
+            if len(prefetch_frames) >= limit:
+                break
+            row = conn.execute(
+                """
+                SELECT annotation_count
+                FROM frame_counts
+                WHERE video_stem=? AND frame_index=?
+                """,
+                (stem, frame_index),
+            ).fetchone()
+            if row is None or int(row["annotation_count"]) != bucket_count:
+                continue
+            key = (stem, frame_index)
+            rec = self.frame_lookup.get(key)
+            if rec is None:
+                continue
+            if stem not in dim_cache:
+                dim_cache[stem] = self.reader.get_dimensions(stem)
+            width, height = dim_cache[stem]
+            prefetch_frames.append(
+                {
+                    "video_stem": stem,
+                    "frame_index": frame_index,
+                    "timestamp_ms": _safe_float(rec.timestamp_ms),
+                    "annotation_count": bucket_count,
+                    "image_width": width,
+                    "image_height": height,
+                    "ai_boxes": self.ai_boxes.get(key, []),
+                    "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
+                }
+            )
+        return prefetch_frames
+
+    def _pick_next_frame_row(self, conn: sqlite3.Connection) -> sqlite3.Row:
+        while True:
+            bucket_count = self._resolve_active_bucket_count(conn)
+            if self._dispatch_bucket_count != bucket_count or not self._dispatch_queue:
+                self._rebuild_dispatch_queue(conn, bucket_count)
+
+            row = self._pop_next_valid_dispatch_row(conn, bucket_count)
+            if row is not None:
+                return row
+
+            self._dispatch_queue.clear()
+            self._dispatch_bucket_count = None
+
     def _build_recommendations(
         self,
         conn: sqlite3.Connection,
@@ -1963,6 +2289,85 @@ class AnnotationState:
             used_tracks.add(ai_track_id)
             recommendations.append(item)
         return recommendations
+
+    def _create_and_insert_assignment(
+        self,
+        conn: sqlite3.Connection,
+        picked_row: sqlite3.Row,
+        annotator_id: str,
+        reason: str,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        stem = str(picked_row["video_stem"])
+        frame_index = int(picked_row["frame_index"])
+        count_before = int(picked_row["annotation_count"])
+        key = (stem, frame_index)
+        if key not in self.frame_lookup:
+            raise ValueError("picked frame not found in frame lookup")
+        if self.reader is None:
+            raise RuntimeError("state not initialized")
+
+        rec = self.frame_lookup[key]
+        assignment_id = f"asg_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+        assigned_at = _now_iso()
+
+        conn.execute(
+            """
+            INSERT INTO assignments (
+                assignment_id,
+                assigned_at,
+                annotator_id,
+                video_stem,
+                frame_index,
+                timestamp_ms,
+                count_before,
+                reason
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                assignment_id,
+                assigned_at,
+                annotator_id,
+                stem,
+                frame_index,
+                rec.timestamp_ms,
+                count_before,
+                reason,
+            ),
+        )
+
+        width, height = self.reader.get_dimensions(stem)
+        recommendations = self._build_recommendations(
+            conn=conn,
+            video_stem=stem,
+            ai_boxes=self.ai_boxes.get(key, []),
+        )
+        payload = {
+            "assignment_id": assignment_id,
+            "video_stem": stem,
+            "frame_index": frame_index,
+            "timestamp_ms": _safe_float(rec.timestamp_ms),
+            "annotation_count": count_before,
+            "total_frames": len(self.frame_pool),
+            "image_width": width,
+            "image_height": height,
+            "ai_boxes": self.ai_boxes.get(key, []),
+            "recommendations": recommendations,
+            "slot_names": SLOT_NAMES,
+            "image_url": f"/api/frame_image?video_stem={stem}&frame_index={frame_index}",
+        }
+
+        csv_row = {
+            "assignment_id": assignment_id,
+            "assigned_at": assigned_at,
+            "annotator_id": annotator_id,
+            "video_stem": stem,
+            "frame_index": frame_index,
+            "timestamp_ms": f"{rec.timestamp_ms:.3f}",
+            "count_before": count_before,
+            "reason": reason,
+        }
+        return payload, csv_row
 
     def _insert_annotation(self, conn: sqlite3.Connection, record: Dict[str, Any]) -> None:
         conn.execute(
@@ -2119,8 +2524,12 @@ class UiHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/api/next_frame":
+            return self._handle_next_frame()
         if path == "/api/next_segment":
             return self._handle_next_segment()
+        if path == "/api/submit":
+            return self._handle_submit()
         if path == "/api/submit_segment":
             return self._handle_submit_segment()
         if path == "/api/update_annotation":
@@ -2151,6 +2560,24 @@ class UiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(image)
 
+    def _handle_next_frame(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.assign_next_frame(
+                annotator_id=annotator_id,
+                reason="manual_next",
+            )
+        except Exception as exc:
+            self.state.logger.error(f"next frame failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
     def _handle_next_segment(self) -> None:
         payload = self._read_json_payload()
         if payload is None:
@@ -2162,6 +2589,21 @@ class UiHandler(BaseHTTPRequestHandler):
             self.state.logger.error(f"next_segment failed annotator={annotator_id}: {exc}")
             return self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"ok": False, "error": str(exc)},
+            )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result})
+
+    def _handle_submit(self) -> None:
+        payload = self._read_json_payload()
+        if payload is None:
+            return
+        annotator_id = str(payload.get("annotator_id", "")).strip() or "annotator_unknown"
+        try:
+            result = self.state.submit_and_assign_next(annotator_id=annotator_id, payload=payload)
+        except Exception as exc:
+            self.state.logger.error(f"submit failed annotator={annotator_id}: {exc}")
+            return self._send_json(
+                HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": str(exc)},
             )
         self._send_json(HTTPStatus.OK, {"ok": True, **result})
@@ -2322,7 +2764,7 @@ class UiHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Segment-mode review service for stage-two annotation"
+        description="UI dual-person annotation service for review stage"
     )
     parser.add_argument(
         "--batch-dir",
