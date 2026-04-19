@@ -60,9 +60,9 @@
 当前事实文档请优先看：
 
 - [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+- [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-- [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
 历史与已归档文档入口见：
@@ -95,19 +95,18 @@
 
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
 2. [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
-3. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
-4. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-5. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+3. [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+4. [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
+5. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 6. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 7. [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
-8. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
-9. [codes/README.md](/home/hrli/data_annotation/codes/README.md)
-10. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
+8. [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+9. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
 如果你只关心 review 标注界面怎么用：
 
 1. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+2. [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 
 如果你只关心 `human_stage_1` 当前优化方向：
 
@@ -261,7 +260,7 @@ node --check codes/application/support/admin_web/app.js
 详见：
 
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 
 ## human_stage_1 UI 该怎么理解
 
@@ -307,15 +306,15 @@ node --check codes/application/support/admin_web/app.js
 
 ## 其他文档
 
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 - [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
-- [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
-- [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
+- [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+- [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 - [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
 - [archive/legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
+- [archive/legacy_requirements/](/home/hrli/data_annotation/docs/archive/legacy_requirements)
 - [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
-- [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
 - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)

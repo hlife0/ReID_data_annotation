@@ -6,6 +6,8 @@
 - 它不是 `human_stage_1` 的粗标说明
 - 如果你要看 `human_stage_1` 当前策略，请优先看：
   - [README.md](/home/hrli/data_annotation/docs/README.md)
+  - [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+  - [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
   - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
 当前标注界面的默认工作单位是：
@@ -192,5 +194,5 @@
 ## 7. 相关文档
 
 - [README.md](/home/hrli/data_annotation/docs/README.md)
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+- [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)

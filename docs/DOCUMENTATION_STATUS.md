@@ -9,12 +9,10 @@
 以下文档应优先视为当前主线的 source of truth：
 
 - [README.md](/home/hrli/data_annotation/docs/README.md)
-- [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
+- [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+- [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-- [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
-- [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-- [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 - [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
@@ -58,14 +56,14 @@
 ### 如果你要理解仓库全貌
 
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
-2. [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
+2. [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
 3. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
 ### 如果你要理解 review 段模式
 
 1. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
-3. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+2. [ACTIVE_WORKFLOW.md](/home/hrli/data_annotation/docs/ACTIVE_WORKFLOW.md)
+3. [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 4. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 
 ### 如果你要理解 `human_stage_1`
@@ -82,4 +80,9 @@
 ### 如果你要找已下线的辅助支线
 
 1. [archive/legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
+2. [archive/README.md](/home/hrli/data_annotation/docs/archive/README.md)
+
+### 如果你要找已归档的旧 requirements 文档
+
+1. [archive/legacy_requirements/](/home/hrli/data_annotation/docs/archive/legacy_requirements)
 2. [archive/README.md](/home/hrli/data_annotation/docs/archive/README.md)
