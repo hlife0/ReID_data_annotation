@@ -1,15 +1,24 @@
-# 标注者上手指南（段模式）
+# 标注者上手指南（review 段模式）
+
+说明：
+
+- 本文档描述的是 `ui_review_server.py` 对应的 review UI
+- 它不是 `human_stage_1` 的粗标说明
+- 如果你要看 `human_stage_1` 当前策略，请优先看：
+  - [README.md](/home/hrli/data_annotation/docs/README.md)
+  - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
 当前标注界面的默认工作单位是：
 
 - 一个段
 
-每个段只会是两种情况之一：
+当前 review 服务里，一个段可能是以下三种情况之一：
 
 1. `stable_segment`
 2. `non_simple_single_frame`
+3. `repair_window`
 
-你不需要理解后台如何分段，只需要按界面给出的当前图片直接标注。
+你不需要理解后台如何分段，只需要按界面给出的当前图片或 anchor 图直接标注。
 
 ---
 
@@ -100,6 +109,18 @@
 
 你把它当成一张普通复杂图片直接标完就行。
 
+### `repair_window`
+
+这类段表示一小段局部碎片区间。
+
+你通常不会只看 1 张图，而是会按界面要求处理几个 anchor frame。
+
+你需要做的是：
+
+- 在每个 anchor 上完成槽位标注
+- 确认身份关系没有错
+- 让系统再根据这些 anchor 自动填中间帧
+
 ---
 
 ## 5. 按钮含义
@@ -153,6 +174,8 @@
 ### `提交并下一段`
 
 提交当前图片结果，并进入下一段。
+
+若当前段是 `repair_window`，通常需要先完成当前要求的 anchor，再进入下一段。
 
 ---
 

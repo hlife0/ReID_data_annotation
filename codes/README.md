@@ -42,3 +42,8 @@
 8. `test/test_process_human_stage_1_prep.py`
 9. `test/test_ui_human_stage_1_server.py`
 10. `test/test_segment_review_server.py`
+
+补充说明：
+
+- `process_segment_review_prep.py` 当前不只保留 first-pass 的 `stable_segment / non_simple_single_frame`，也会在 second-pass 中生成 `repair_window`
+- 当前持续优化的第一轮人工主线是 `human_stage_1`

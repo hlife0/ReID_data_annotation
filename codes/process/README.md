@@ -41,7 +41,8 @@
 
 - 读取 `pseudo_labels/*.auto.csv`
 - 计算简单帧
-- 求极大稳定段
+- 先求 first-pass 的极大稳定段与单帧非简单帧
+- 再在 first-pass 结果之上做 second-pass `repair_window` 合并
 - 生成：
   - `segment_prep/*.segments.json`
   - `segment_prep/*.segment_frames.json`
@@ -57,7 +58,7 @@
 
 - 读取 `segment_prep/`
 - 按段分发
-- 接收代表帧或单帧标注
+- 接收 `stable_segment`、`non_simple_single_frame` 与 `repair_window` 的标注
 - 展开成逐帧 `p1-p7` 结果
 
 ### 4b. `process_human_stage_1_prep.py`
@@ -124,6 +125,16 @@ process_prepare_capture_batch.py   (可选)
 ```text
 process_prepare_capture_batch.py   (可选)
 -> process_prelabel_batch.py
+-> process_human_stage_1_prep.py
+-> application/ui_human_stage_1_server.py
+```
+
+## 当前优化重点
+
+当前仓库仍保留 review 栈与 admin 栈，但正在持续优化的第一轮人工主线已经转到：
+
+```text
+process_prelabel_batch.py
 -> process_human_stage_1_prep.py
 -> application/ui_human_stage_1_server.py
 ```

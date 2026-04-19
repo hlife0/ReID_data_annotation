@@ -35,7 +35,7 @@
 
 - review 服务：
   - `./codes/application/ui_review_server.py`
-  - 默认端口 `10086`
+  - 代码默认端口 `10086`
 - admin 服务：
   - `./codes/application/ui_admin_server.py`
   - 默认端口 `10087`
@@ -66,9 +66,13 @@
 └── logs/
 ```
 
-当前正式批次：
+当前 review 基线 batch：
 
 - `./annotation/batch_20260413_v01`
+
+当前用于试运行较新分段行为的派生 batch：
+
+- `./annotation/batch_20260417_v01`
 
 ---
 
@@ -178,14 +182,17 @@
 
 当前主线能力是：
 
-- 离线切分稳定段与单帧非简单帧
+- 离线 first-pass 切分稳定段与单帧非简单帧
+- 离线 second-pass 生成 `repair_window`
 - 代表帧选择
 - 段级派单
 - 基于当前 session 历史 `track -> p1-p7` 的推荐预填
 - stable segment 与 non-simple single frame 都会返回推荐
+- `repair_window` 会返回 anchor frame 序列，并按 anchor 提交后再自动填充中间帧
 - 前端可一键把剩余未设置槽位批量标记为 `absent`
 - 稳定段按 `track_id -> p1-p7` 展开为逐帧结果
 - 单帧非简单帧直接写入逐帧结果
+- `repair_window` 在填充成功时也会展开为逐帧结果
 
 ---
 
@@ -217,9 +224,10 @@
 当前已知限制包括：
 
 1. 段模式实现仍处于持续收口期
-2. 稳定段当前仍只使用 `low_score + overlap + track-set constancy`
-3. 稳定段代表帧上的手工框到 AI track 的自动匹配目前只做唯一匹配
-4. 当前推荐预填仍然使用运行时扫描 `annotations.slots_json`，还没有单独缓存成专门的统计层
+2. 当前实现同时包含 first-pass 基础小段和 second-pass `repair_window` 工作单元，阅读时需区分两层语义
+3. 稳定段当前仍只使用 `low_score + overlap + track-set constancy`
+4. 稳定段代表帧上的手工框到 AI track 的自动匹配目前只做唯一匹配
+5. 当前推荐预填仍然使用运行时扫描 `annotations.slots_json`，还没有单独缓存成专门的统计层
 
 ---
 
@@ -233,6 +241,16 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10086
+```
+
+如果本地已经把 `10086` 留给 `human_stage_1`，推荐改成：
+
+```bash
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
+  --batch-dir ./annotation/batch_20260413_v01 \
+  --host 127.0.0.1 \
+  --port 10088
 ```
 
 ### 启动 admin

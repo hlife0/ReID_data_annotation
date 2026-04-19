@@ -8,12 +8,12 @@
 - 当前代码分区说明见：
   - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 
-当前正式批次是：
+当前正式 batch 基线是：
 
 - `./annotation/batch_20260413_v01`
 - 当前批次的段级压缩统计报告见：
   - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
-- 当前推荐用于试运行最新降本策略与 UI 行为的派生 batch：
+- 当前推荐用于试运行最新 `human_stage_1` 行为与降本策略的派生 batch：
   - `./annotation/batch_20260417_v01`
   - 统计报告见：
     - [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)
@@ -25,16 +25,17 @@
 截至当前版本，主线能力如下：
 
 1. A 阶段：预标注批处理可从 `data/required/` 生成 `pseudo_labels/*.auto.csv`
-2. B/Y 阶段：review 服务已开始切到段模式
+2. B/Y 阶段：review 服务已切到段模式，并已支持 `repair_window`
 3. 离线主线已新增：
    - `codes/process/process_segment_review_prep.py`
    - `segment_prep/*.segments.json`
    - `segment_prep/*.segment_frames.json`
    - `segment_prep/segment_prep_summary.json`
    - `codes/process/README.md`
-4. 段模式主语义已明确为：
+4. review 在线工作单元当前包括：
    - `stable_segment`
    - `non_simple_single_frame`
+   - `repair_window`
 5. 数学定义文档与段模式需求文档已建立
 6. 已新增独立的一轮粗标主线：
    - `codes/process/process_human_stage_1_prep.py`
@@ -48,15 +49,17 @@
    - 批量“其余设为不存在”
    - 左侧可折叠历史栏与已提交记录修改
 
-当前主线规范见：
+当前事实文档请优先看：
 
+- [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
 - [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
 - [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+- [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
-历史轨迹复核文档已归档到：
+历史与已归档文档入口见：
 
-- [archive/legacy_segment_mode/README.md](/home/hrli/data_annotation/docs/archive/legacy_segment_mode/README.md)
+- [archive/README.md](/home/hrli/data_annotation/docs/archive/README.md)
 
 ---
 
@@ -83,18 +86,25 @@
 如果你是第一次接手，推荐顺序：
 
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
-2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
-3. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
-4. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
-5. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
-6. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
-7. [codes/README.md](/home/hrli/data_annotation/codes/README.md)
-8. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
+2. [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
+3. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+4. [STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md](/home/hrli/data_annotation/docs/STABLE_SEGMENT_MATHEMATICAL_DEFINITIONS.md)
+5. [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
+6. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
+7. [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
+8. [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
+9. [codes/README.md](/home/hrli/data_annotation/codes/README.md)
+10. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
-如果你只关心标注界面怎么用：
+如果你只关心 review 标注界面怎么用：
 
 1. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 2. [REQUIREMENTS_SEGMENT_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_SEGMENT_REVIEW.md)
+
+如果你只关心 `human_stage_1` 当前优化方向：
+
+1. [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
+2. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 
 ---
 
@@ -162,6 +172,8 @@ PYTHONPATH=codes .venv/bin/python codes/process/process_human_stage_1_prep.py \
 
 ### 3. 启动 human_stage_1 服务
 
+下面的 `10086` 是当前仓库常用的本地映射端口，不是 `ui_human_stage_1_server.py` 里的 argparse 默认端口。
+
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python codes/application/ui_human_stage_1_server.py \
@@ -176,7 +188,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_human_stage_1_server.py \
 
 ### 4. 启动 review 服务
 
-如果需要保留旧的段模式 review 服务，建议换一个空闲端口，避免和 `human_stage_1` 冲突。
+`ui_review_server.py` 的代码默认端口仍然是 `10086`，但如果本地已经把 `10086` 留给 `human_stage_1`，推荐像下面这样改在 `10088` 启动。
 
 ```bash
 cd /home/hrli/data_annotation
@@ -240,6 +252,7 @@ node --check codes/application/ui_admin_web/app.js
 
 - `stable_segment`
 - `non_simple_single_frame`
+- `repair_window`
 
 推荐用法是：
 
@@ -275,10 +288,11 @@ node --check codes/application/ui_admin_web/app.js
    - 已匹配但当前没选中的框：实线
    - 只有 track、尚未匹配到 pid 的框：深色虚线
 
-对外部部署来说，当前常见访问地址是：
+对外部部署来说，本地常见访问地址是：
 
 - 本地：`http://127.0.0.1:10086`
-- ngrok：`https://reda-acetometrical-endosporously.ngrok-free.dev/`
+
+如果需要外部转发，请以当前部署时的 ngrok 或反向代理配置为准，不要默认依赖旧的固定 URL。
 
 ---
 
@@ -302,9 +316,9 @@ node --check codes/application/ui_admin_web/app.js
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
-- [REQUIREMENTS_ANNOTATION_ANALYSIS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_ANNOTATION_ANALYSIS.md)
-- [REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS_REVIEW_ANNOTATION_RESULTS.md)
-- [REQUIREMENTS_FINAL_ANNOTATION.md](/home/hrli/data_annotation/docs/REQUIREMENTS_FINAL_ANNOTATION.md)
+- [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
+- [archive/legacy_downstream/](/home/hrli/data_annotation/docs/archive/legacy_downstream)
+- [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
 - [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
 - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
 - [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)

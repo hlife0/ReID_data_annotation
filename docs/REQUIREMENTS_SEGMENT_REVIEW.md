@@ -1,6 +1,6 @@
-# 需求文档 Y：段模式 Review（稳定段 + 单帧非简单帧）
+# 需求文档 Y：段模式 Review（稳定段 + 单帧非简单帧 + repair_window）
 
-最后更新：2026-04-15
+最后更新：2026-04-19
 
 ---
 
@@ -29,12 +29,14 @@
 
 1. 主语义必须是“段”
 2. 离线阶段必须先把每个 `session` 切成很多标注段
-3. 每个标注段只能是两种类型之一：
+3. first-pass 的基础小段只能是两种类型之一：
    - `stable_segment`
    - `non_simple_single_frame`
-4. 标注者不应看到复杂的段定义细节
-5. 标注者在前端上仍然只需要“看图并标图”
-6. 最终必须能把段级标注结果展开成逐帧 `p1-p7` 结果
+4. 当前实现中，最终在线工作单元还允许在 first-pass 结果之上引入：
+   - `repair_window`
+5. 标注者不应看到复杂的段定义细节
+6. 标注者在前端上仍然只需要“看图并标图”
+7. 最终必须能把段级标注结果展开成逐帧 `p1-p7` 结果
 
 ---
 
@@ -68,7 +70,7 @@
 
 ### 4.2 段类型
 
-每个标注段必须且只能属于以下两类之一：
+first-pass 的基础小段必须且只能属于以下两类之一：
 
 1. `stable_segment`
 2. `non_simple_single_frame`
@@ -77,6 +79,12 @@
 
 - `stable_segment` 的定义严格沿用数学定义文档中的稳定段
 - `non_simple_single_frame` 指由一个非简单帧单独形成的单帧区间 `[t,t]`
+
+在当前实现中，最终进入在线 review 服务的工作单元还允许出现第三类：
+
+3. `repair_window`
+
+这里的 `repair_window` 不是数学定义文档中的基础对象，而是建立在 first-pass 结果之上的 second-pass merge layer。
 
 ### 4.3 代表帧 `representative_frame`
 
@@ -127,13 +135,13 @@ R_sigma(t, p)
 
 ### 5.1 总原则
 
-对每个 `session`，后端必须先做离线分段，得到一组标注段。
+对每个 `session`，后端必须先做离线分段，得到一组基础标注段。
 
 这组标注段必须满足：
 
 1. 互不重叠
 2. 完全覆盖该 `session` 的全部帧
-3. 每段都是合法的 `stable_segment` 或 `non_simple_single_frame`
+3. first-pass 阶段每段都是合法的 `stable_segment` 或 `non_simple_single_frame`
 
 ### 5.2 稳定段生成规则
 
@@ -156,7 +164,26 @@ R_sigma(t, p)
 
 不得把多个非简单帧合并成一个多帧复杂段。
 
-也就是说，剩余部分一律按“逐帧难例”处理。
+也就是说，first-pass 剩余部分一律按“逐帧难例”处理。
+
+### 5.5 当前实现中的 second-pass `repair_window`
+
+当前实现允许在 first-pass 结果之上，再做一层 second-pass 合并。
+
+second-pass 的目标不是改写数学定义，而是减少在线 review 的碎片化工作单元数。
+
+当前实现中：
+
+1. first-pass 仍然先生成：
+   - `stable_segment`
+   - `non_simple_single_frame`
+2. second-pass 再只基于这份 first-pass 结果，选择局部碎片簇并合并为：
+   - `repair_window`
+
+因此应区分：
+
+1. 数学上的基础小段分解
+2. 当前实现上的最终在线工作单元
 
 ### 5.4 代表帧选择规则
 
@@ -209,6 +236,14 @@ representative_frame = floor((start_frame + end_frame) / 2)
   - `track_ids` 必须等于该段恒定轨迹集合
 - 若 `segment_type=non_simple_single_frame`
   - `start_frame=end_frame=representative_frame`
+- 若 `segment_type=repair_window`
+  - 其范围必须建立在一组 first-pass 小段之上
+  - 当前实现还会额外记录：
+    - `anchor_candidates`
+    - `repairability_score`
+    - `fragmentation_score`
+    - `expected_gain`
+    - `trigger_reason`
 
 ### 6.2 `<video_stem>.segment_frames.json`
 
@@ -228,8 +263,9 @@ representative_frame = floor((start_frame + end_frame) / 2)
 2. `segment_count`
 3. `stable_segment_count`
 4. `non_simple_single_frame_count`
-5. `avg_stable_segment_length`
-6. `max_stable_segment_length`
+5. `repair_window_count`
+6. `avg_stable_segment_length`
+7. `max_stable_segment_length`
 
 ---
 
@@ -484,14 +520,18 @@ representative_frame = floor((start_frame + end_frame) / 2)
 
 数学定义要求：
 
-- 全部帧被分解为稳定段与单帧非简单帧
+- 全部帧先被分解为稳定段与单帧非简单帧
 
 本需求文档要求：
 
-- 全部标注段必须完全覆盖 session 全部帧
-- 每段只能是 `stable_segment` 或 `non_simple_single_frame`
+- first-pass 基础小段必须完全覆盖 session 全部帧
+- first-pass 每段只能是 `stable_segment` 或 `non_simple_single_frame`
+- 当前实现允许在 first-pass 结果之上再引入 `repair_window` 作为 second-pass 在线工作单元
 
-二者一致。
+因此：
+
+- 数学定义与 first-pass 分解一致
+- `repair_window` 属于工程上的 second-pass 合并层，不属于数学定义的基础分解对象
 
 ### 核查 3：稳定段定义一致
 
