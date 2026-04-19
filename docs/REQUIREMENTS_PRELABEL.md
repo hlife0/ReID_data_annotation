@@ -14,7 +14,7 @@
 
 ## 2. 当前实现入口
 
-主脚本：`./codes/process/process_prelabel_batch.py`
+主脚本：`./codes/process/step1_prelabel/process_prelabel_batch.py`
 
 可选测试脚本（仅用于可视化核查，不是主流程必需）：
 
@@ -152,7 +152,7 @@
 ### 9.1 主流程（默认 ultralytics）
 
 ```bash
-.venv/bin/python ./codes/process/process_prelabel_batch.py \
+.venv/bin/python ./codes/process/step1_prelabel/process_prelabel_batch.py \
   --required-root ./data/required \
   --output-root ./annotation \
   --backend ultralytics \
@@ -164,7 +164,7 @@
 ### 9.2 只做任务抽取（A0/A1）
 
 ```bash
-.venv/bin/python ./codes/process/process_prelabel_batch.py --only-task-extraction
+.venv/bin/python ./codes/process/step1_prelabel/process_prelabel_batch.py --only-task-extraction
 ```
 
 ### 9.3 可选：单视频渲染检测框（测试）

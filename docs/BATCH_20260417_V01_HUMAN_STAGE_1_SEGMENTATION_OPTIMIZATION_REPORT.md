@@ -566,7 +566,7 @@ first-pass 主要扫的参数是：
 
 ### 12.1 分析脚本
 
-- `codes/process/analyze_human_stage_1_segmentation_grid.py`
+- `codes/process/devtools/analyze_human_stage_1_segmentation_grid.py`
 
 ### 12.2 自动生成结果
 

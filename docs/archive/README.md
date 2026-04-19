@@ -8,6 +8,8 @@
   - 旧逐帧/旧双人主线的历史材料
 - [legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
   - 已从活跃仓库下线的一次性标注代码对应文档与数据库说明
+- [legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
+  - 已从活跃仓库下线的辅助支线文档，例如 IMU 映射辅助
 - [legacy_segment_mode/](/home/hrli/data_annotation/docs/archive/legacy_segment_mode)
   - 旧问题池、旧 issue mode、旧段模式实验材料
 - [historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)

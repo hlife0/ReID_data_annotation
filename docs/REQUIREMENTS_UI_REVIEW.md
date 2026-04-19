@@ -34,15 +34,15 @@
 ## 2. 当前实现入口
 
 - review 服务：
-  - `./codes/application/ui_review_server.py`
+  - `./codes/application/step5_stage2_review/ui_review_server.py`
   - 代码默认端口 `10086`
 - admin 服务：
-  - `./codes/application/ui_admin_server.py`
+  - `./codes/application/support/ui_admin_server.py`
   - 默认端口 `10087`
 - review 前端：
-  - `./codes/application/ui_review_web/`
+  - `./codes/application/step5_stage2_review/web/`
 - admin 前端：
-  - `./codes/application/ui_admin_web/`
+  - `./codes/application/support/admin_web/`
 
 ---
 
@@ -223,7 +223,7 @@
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10086
@@ -233,7 +233,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10088
@@ -243,7 +243,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/support/ui_admin_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10087
@@ -253,7 +253,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process/process_segment_review_prep.py \
+PYTHONPATH=codes .venv/bin/python codes/process/step5_stage2_review_prep/process_segment_review_prep.py \
   --batch-dir ./annotation/batch_20260413_v01
 ```
 

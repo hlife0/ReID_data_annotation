@@ -46,14 +46,12 @@
 
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 
-### C 阶段 / IMU 映射辅助
-
-- [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
-
-### 其他增强与下游
+### 历史辅助与归档资源
 
 - 旧一次性标注下游分析、旧复审结果 UI 和旧最终导出需求，现已归档到：
   - [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
+- 旧 IMU 映射辅助需求，现已归档到：
+  - [archive/legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
 - 旧批次 IMU 分析报告，现已归档到：
   - [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
 

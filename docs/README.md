@@ -1,6 +1,19 @@
 # Data Annotation Pipeline
 
-本仓库当前已经不只是“逐帧双人框标注工具”，而是一套围绕 **AI 预标注 + 段模式复核 + 逐帧 `p1-p7` 结果生成** 的标注流程。
+本仓库当前是一套围绕 **两阶段标注主线** 组织的代码仓库。
+
+主线口径是：
+
+- `Step 0` 原始采集整理（可选）
+- `Step 1` AI 预标注
+- `Step 2` 第一阶段任务生成
+- `Step 3` 第一阶段人工粗标
+- `Step 4` 第二阶段任务池生成
+- `Step 5` 第二阶段精细化标注 / review
+
+其中当前真正已经跑通的主线重点是：
+
+- `Step 0 -> Step 3`
 
 当前统一代码目录是：
 
@@ -23,29 +36,26 @@
 截至当前版本，主线能力如下：
 
 1. A 阶段：预标注批处理可从 `data/required/` 生成 `pseudo_labels/*.auto.csv`
-2. B/Y 阶段：review 服务已切到段模式，并已支持 `repair_window`
-3. 离线主线已新增：
-   - `codes/process/process_segment_review_prep.py`
-   - `segment_prep/*.segments.json`
-   - `segment_prep/*.segment_frames.json`
-   - `segment_prep/segment_prep_summary.json`
-   - `codes/process/README.md`
-4. review 在线工作单元当前包括：
-   - `stable_segment`
-   - `non_simple_single_frame`
-   - `repair_window`
-5. 数学定义文档与段模式需求文档已建立
-6. 已新增独立的一轮粗标主线：
-   - `codes/process/process_human_stage_1_prep.py`
+2. `Step 1` 已稳定：
+   - `codes/process/step1_prelabel/process_prelabel_batch.py`
+   - `pseudo_labels/*.auto.csv`
+3. `Step 2` 已稳定：
+   - `codes/process/step2_stage1_prep/process_human_stage_1_prep.py`
    - `annotation/batch_*/human_stage_1_prep/`
-   - `codes/application/ui_human_stage_1_server.py`
-   - `codes/application/ui_human_stage_1_web/`
-7. `human_stage_1` 当前已落地的交互包括：
+4. `Step 3` 已稳定：
+   - `codes/application/step3_human_stage_1/ui_human_stage_1_server.py`
+   - `codes/application/step3_human_stage_1/web/`
+5. `Step 3` 当前已落地的交互包括：
    - first-pass 之后的 second-pass `repair_window` 合并
    - 单帧 coarse decision：`ai_match / absent / needs_manual`
    - 同视频历史多数票推荐与自动预选
    - 批量“其余设为不存在”
    - 左侧可折叠历史栏与已提交记录修改
+6. `Step 4` 目录已显式保留，但当前生产实现仍未独立落地
+7. `Step 5` 资源已整理到：
+   - `codes/process/step5_stage2_review_prep/`
+   - `codes/application/step5_stage2_review/`
+   但按主线口径仍视为后续阶段
 
 当前事实文档请优先看：
 
@@ -106,75 +116,65 @@
 
 ---
 
-## 当前推荐流程
+## 当前主线流程
 
 ```mermaid
 flowchart LR
-    A[data/required] --> B[process/process_prelabel_batch.py]
+    A[data/required] --> B[process/step1_prelabel/process_prelabel_batch.py]
     B --> C[batch/pseudo_labels/*.auto.csv]
-    C --> D1[process/process_segment_review_prep.py]
-    D1 --> E1[batch/segment_prep]
-    E1 --> F1[application/ui_review_server.py]
-    F1 --> G1[segment-mode review UI]
-    G1 --> H1[reviewed_raw/*.jsonl]
-    G1 --> I1[reviewed/*.csv]
-    C --> D2[process/process_human_stage_1_prep.py]
+    C --> D2[process/step2_stage1_prep/process_human_stage_1_prep.py]
     D2 --> E2[batch/human_stage_1_prep]
-    E2 --> F2[application/ui_human_stage_1_server.py]
+    E2 --> F2[application/step3_human_stage_1/ui_human_stage_1_server.py]
     F2 --> G2[human_stage_1 UI]
     G2 --> H2[human_stage_1/coarse_labels_raw]
+    H2 --> J[step4 stage-two task-pool generation]
+    J --> K[step5 stage-two review and refinement]
 ```
 
 ### 这条主线里每一步的角色
 
-- `process/process_prelabel_batch.py`
-  - 负责 A 阶段 AI 预标注
-- `process/process_segment_review_prep.py`
-  - 负责离线生成：
-    - `segments.json`
-    - `segment_frames.json`
-    - `segment_prep_summary.json`
-- `application/ui_review_server.py`
-  - 负责在线段级派单、代表帧加载、提交与逐帧展开
-- `process/process_human_stage_1_prep.py`
-  - 负责离线生成：
-    - `human_stage_1_prep/*.segments.json`
-    - `human_stage_1_prep/*.segment_frames.json`
-    - `human_stage_1_prep/human_stage_1_prep_summary.json`
-- `application/ui_human_stage_1_server.py`
-  - 负责在线第一轮粗标派单、历史推荐、coarse decision 提交与修改
-- `application/ui_admin_server.py`
-  - 负责看全局统计与 annotator 活跃度
-- `process/README.md`
-  - 负责说明整个处理流程先后顺序
+- `Step 0`
+  - `process/step0_preprocess/`
+  - 负责把原始采集整理成标准输入
+- `Step 1`
+  - `process/step1_prelabel/process_prelabel_batch.py`
+  - 负责 AI 预标注
+- `Step 2`
+  - `process/step2_stage1_prep/process_human_stage_1_prep.py`
+  - 负责生成第一阶段任务
+- `Step 3`
+  - `application/step3_human_stage_1/`
+  - 负责第一阶段人工粗标
+- `Step 4`
+  - `process/step4_stage2_task_pool/`
+  - 当前是显式保留的主线缺口
+- `Step 5`
+  - `process/step5_stage2_review_prep/`
+  - `application/step5_stage2_review/`
+  - 当前保留基础设施，但按主线口径属于后续阶段
+- `Support`
+  - `application/support/ui_admin_server.py`
+  - 负责管理面板
 
 ---
 
 ## 常用命令
 
-### 1. 运行离线 segment prep
+### 1. 运行离线 human_stage_1 prep
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process/process_segment_review_prep.py \
-  --batch-dir ./annotation/batch_20260413_v01
-```
-
-### 2. 运行离线 human_stage_1 prep
-
-```bash
-cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/process/process_human_stage_1_prep.py \
+PYTHONPATH=codes .venv/bin/python codes/process/step2_stage1_prep/process_human_stage_1_prep.py \
   --batch-dir ./annotation/batch_20260417_v01
 ```
 
-### 3. 启动 human_stage_1 服务
+### 2. 启动 human_stage_1 服务
 
-下面的 `10086` 是当前仓库常用的本地映射端口，不是 `ui_human_stage_1_server.py` 里的 argparse 默认端口。
+下面的 `10086` 是当前仓库常用的本地映射端口，不是 `step3_human_stage_1/ui_human_stage_1_server.py` 里的 argparse 默认端口。
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_human_stage_1_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/step3_human_stage_1/ui_human_stage_1_server.py \
   --batch-dir ./annotation/batch_20260417_v01 \
   --host 127.0.0.1 \
   --port 10086
@@ -184,13 +184,13 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_human_stage_1_server.py \
 
 - `http://127.0.0.1:10086`
 
-### 4. 启动 review 服务
+### 3. 启动 review 服务（当前归入 `Step 5` 资源）
 
-`ui_review_server.py` 的代码默认端口仍然是 `10086`，但如果本地已经把 `10086` 留给 `human_stage_1`，推荐像下面这样改在 `10088` 启动。
+`step5_stage2_review/ui_review_server.py` 的代码默认端口仍然是 `10086`，但如果本地已经把 `10086` 留给 `human_stage_1`，推荐像下面这样改在 `10088` 启动。
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_review_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10088
@@ -200,11 +200,11 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_review_server.py \
 
 - `http://127.0.0.1:10088`
 
-### 5. 启动 admin 服务
+### 4. 启动 admin 服务
 
 ```bash
 cd /home/hrli/data_annotation
-PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
+PYTHONPATH=codes .venv/bin/python codes/application/support/ui_admin_server.py \
   --batch-dir ./annotation/batch_20260413_v01 \
   --host 127.0.0.1 \
   --port 10087
@@ -214,20 +214,20 @@ PYTHONPATH=codes .venv/bin/python codes/application/ui_admin_server.py \
 
 - `http://127.0.0.1:10087`
 
-### 6. 跑当前核心测试
+### 5. 跑当前核心测试
 
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python -m unittest discover -s codes/test
 ```
 
-### 7. JS 语法检查
+### 6. JS 语法检查
 
 ```bash
 cd /home/hrli/data_annotation
-node --check codes/application/ui_human_stage_1_web/app.js
-node --check codes/application/ui_review_web/app.js
-node --check codes/application/ui_admin_web/app.js
+node --check codes/application/step3_human_stage_1/web/app.js
+node --check codes/application/step5_stage2_review/web/app.js
+node --check codes/application/support/admin_web/app.js
 ```
 
 ---
@@ -313,9 +313,9 @@ node --check codes/application/ui_admin_web/app.js
 - [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
-- [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
 - [DOCUMENTATION_STATUS.md](/home/hrli/data_annotation/docs/DOCUMENTATION_STATUS.md)
 - [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
+- [archive/legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
 - [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
 - [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
 - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)

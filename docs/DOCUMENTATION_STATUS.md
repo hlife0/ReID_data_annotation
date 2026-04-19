@@ -15,7 +15,6 @@
 - [REQUIREMENTS_UI_REVIEW.md](/home/hrli/data_annotation/docs/REQUIREMENTS_UI_REVIEW.md)
 - [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 - [REQUIREMENTS_PRELABEL.md](/home/hrli/data_annotation/docs/REQUIREMENTS_PRELABEL.md)
-- [REQUIREMENTS_IMU_MAPPING.md](/home/hrli/data_annotation/docs/REQUIREMENTS_IMU_MAPPING.md)
 - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 - [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
@@ -46,8 +45,11 @@
 1. 当前活跃代码在 `codes/`
 2. 当前第一轮人工主线是 `human_stage_1`
 3. `human_stage_1` 的核心目标是把 AI 逐帧框压缩成更少的人工工作单元
-4. review 栈仍然保留并支持段模式，但活跃仓库已不再支持旧的一次性标注
-5. 当前实际实现里，review 工作单元已不只包含 `stable_segment` 和 `non_simple_single_frame`，也包含 `repair_window`
+4. 当前 active 主线按 `Step 0` 到 `Step 5` 组织，但真正已经跑通的重点是 `Step 0 -> Step 3`
+5. `Step 4` 当前是显式保留的主线缺口
+6. `Step 5` 资源仍在 active 仓库中，但按主线口径属于后续阶段
+7. 活跃仓库已不再支持旧的一次性标注
+8. IMU 映射辅助已归档，不再属于 active 主线
 
 ---
 
@@ -75,4 +77,9 @@
 ### 如果你要找已下线的一次性标注资源
 
 1. [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
+2. [archive/README.md](/home/hrli/data_annotation/docs/archive/README.md)
+
+### 如果你要找已下线的辅助支线
+
+1. [archive/legacy_auxiliary/](/home/hrli/data_annotation/docs/archive/legacy_auxiliary)
 2. [archive/README.md](/home/hrli/data_annotation/docs/archive/README.md)
