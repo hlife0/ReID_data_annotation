@@ -11,12 +11,10 @@
 当前正式 batch 基线是：
 
 - `./annotation/batch_20260413_v01`
-- 当前批次的段级压缩统计报告见：
-  - [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
 - 当前推荐用于试运行最新 `human_stage_1` 行为与降本策略的派生 batch：
   - `./annotation/batch_20260417_v01`
-  - 统计报告见：
-    - [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)
+  - 当前 `human_stage_1` 优化报告见：
+    - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
 ---
 
@@ -320,5 +318,4 @@ node --check codes/application/ui_admin_web/app.js
 - [archive/legacy_one_shot_annotation/](/home/hrli/data_annotation/docs/archive/legacy_one_shot_annotation)
 - [archive/historical_reports/](/home/hrli/data_annotation/docs/archive/historical_reports)
 - [REQUIREMENTS.md](/home/hrli/data_annotation/docs/REQUIREMENTS.md)
-- [BATCH_20260413_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260413_V01_SEGMENT_SUMMARY.md)
-- [BATCH_20260417_V01_SEGMENT_SUMMARY.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_SEGMENT_SUMMARY.md)
+- [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
