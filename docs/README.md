@@ -287,6 +287,9 @@ node --check codes/application/support/admin_web/app.js
    - 当前选中的已匹配框：橙色高亮
    - 已匹配但当前没选中的框：实线
    - 只有 track、尚未匹配到 pid 的框：深色虚线
+5. 专属后台监控服务：
+   - `codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py`
+   - 用于查看 stage1 队列进度、annotator 工作量、最近提交和 segment 明细
 
 对外部部署来说，本地常见访问地址是：
 

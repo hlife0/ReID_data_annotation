@@ -41,6 +41,42 @@ PYTHONPATH=codes .venv/bin/python \
 
 ---
 
+## Step 3 服务：`human_stage_1` admin
+
+目录：
+
+- [step3_human_stage_1/](/home/hrli/data_annotation/codes/application/step3_human_stage_1)
+
+后端：
+
+- [ui_human_stage_1_admin_server.py](/home/hrli/data_annotation/codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py)
+
+前端：
+
+- [admin_web/index.html](/home/hrli/data_annotation/codes/application/step3_human_stage_1/admin_web/index.html)
+- [admin_web/app.js](/home/hrli/data_annotation/codes/application/step3_human_stage_1/admin_web/app.js)
+- [admin_web/styles.css](/home/hrli/data_annotation/codes/application/step3_human_stage_1/admin_web/styles.css)
+
+作用：
+
+- 监控 `human_stage_1` 专属队列进度
+- 查看 annotator 的 stage1 已提交帧数和进度
+- 查看最近提交记录
+- 查询指定 `segment_id` 的队列与提交明细
+
+当前常用命令：
+
+```bash
+cd /home/hrli/data_annotation
+PYTHONPATH=codes .venv/bin/python \
+  codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
+  --host 127.0.0.1 \
+  --port 10087
+```
+
+---
+
 ## Step 5 服务：review
 
 目录：
