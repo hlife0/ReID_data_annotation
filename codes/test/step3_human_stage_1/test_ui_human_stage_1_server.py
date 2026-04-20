@@ -7,6 +7,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 import cv2
@@ -341,7 +342,7 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertEqual(result["segment_id"], "sample_stage1_seg_000001")
         self.assertEqual(result["frame_index"], 2)
         self.assertEqual(result["submitted_slot_count"], 3)
-        with sqlite3.connect(state.db_path) as conn:
+        with closing(sqlite3.connect(state.db_path)) as conn:
             row = conn.execute(
                 """
                 SELECT segment_id, segment_type, frame_index, slot_decisions_json
