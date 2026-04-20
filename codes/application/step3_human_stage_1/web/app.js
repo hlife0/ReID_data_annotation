@@ -1,4 +1,14 @@
-const SLOT_NAMES = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+const SLOT_NAMES = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+const DEFAULT_SLOT_DISPLAY_NAMES = {
+  "p1": "P1(赵宇轩)",
+  "p2": "P2(张络屹)",
+  "p3": "P3(Alison)",
+  "p4": "P4(刘浩贤)",
+  "p5": "P5(何炳毅)",
+  "p6": "P6(李泓睿)",
+  "p7": "P7(梁芳舟)",
+  "p8": "P8(谢灵韵)",
+};
 const ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"];
 const ANNOTATOR_STORAGE_KEY = "human_stage_1_annotator_id";
 const HISTORY_COLLAPSED_KEY = "human_stage_1_history_collapsed";
@@ -34,6 +44,7 @@ const refs = {
 const state = {
   task: null,
   slotNames: SLOT_NAMES.slice(),
+  slotDisplayNames: { ...DEFAULT_SLOT_DISPLAY_NAMES },
   slotDecisions: new Map(),
   activeSlot: "p1",
   history: [],
@@ -85,6 +96,11 @@ function activeDecision() {
   };
 }
 
+function slotDisplayName(slot) {
+  const normalized = String(slot || "").trim().toLowerCase();
+  return state.slotDisplayNames[normalized] || DEFAULT_SLOT_DISPLAY_NAMES[normalized] || normalized.toUpperCase();
+}
+
 function decisionSummary(decision) {
   if (!decision || decision.decision_type === "pending") return "未设置";
   if (decision.decision_type === "ai_match") {
@@ -107,6 +123,7 @@ async function fetchJson(url, options = {}) {
 function setTaskFromPayload(payload, { rememberAssignment = true } = {}) {
   state.task = payload;
   state.slotNames = payload.slot_names || SLOT_NAMES.slice();
+  state.slotDisplayNames = { ...DEFAULT_SLOT_DISPLAY_NAMES, ...(payload.slot_display_names || {}) };
   if (!state.slotNames.includes(state.activeSlot)) {
     state.activeSlot = state.slotNames[0] || "p1";
   }
@@ -168,7 +185,7 @@ function assignedSlotByTrackId(trackId) {
 function labelForTrackId(trackId) {
   const assignedSlot = assignedSlotByTrackId(trackId);
   if (assignedSlot) {
-    return `tid:${trackId} -> pid:${assignedSlot}`;
+    return `tid:${trackId} -> pid:${slotDisplayName(assignedSlot)}`;
   }
   return `tid:${trackId}`;
 }
@@ -184,7 +201,7 @@ function overlayLabelForTrackId(trackId) {
 function legendLabelForTrackId(trackId) {
   const assignedSlot = assignedSlotByTrackId(trackId);
   if (assignedSlot) {
-    return `track ${trackId} (${assignedSlot})`;
+    return `track ${trackId} (${slotDisplayName(assignedSlot)})`;
   }
   return `track ${trackId}`;
 }
@@ -226,7 +243,7 @@ function renderSlotTabs() {
     btn.className = "slot-tab";
     if (slot === state.activeSlot) btn.classList.add("active");
     btn.innerHTML = `
-      <span class="slot-tab-label">${slot.toUpperCase()}</span>
+      <span class="slot-tab-label">${slotDisplayName(slot)}</span>
       <span class="slot-tab-source">${decisionSummary(decision)}</span>
     `;
     btn.addEventListener("click", () => {
@@ -265,7 +282,7 @@ function renderAiButtons() {
 
 function syncActiveSlotUI() {
   const decision = activeDecision();
-  refs.activeSlotTitle.textContent = state.activeSlot.toUpperCase();
+  refs.activeSlotTitle.textContent = slotDisplayName(state.activeSlot);
   refs.activeSlotSummary.textContent = decisionSummary(decision);
   refs.activeAbsentBtn.classList.toggle("active", decision.decision_type === "absent");
   refs.activeNeedsManualBtn.classList.toggle("active", decision.decision_type === "needs_manual");
@@ -327,7 +344,7 @@ function buildSubmitPayload() {
   const slot_decisions = state.slotNames.map((slot) => state.slotDecisions.get(slot));
   const pending = slot_decisions.find((item) => !item || item.decision_type === "pending");
   if (pending) {
-    throw new Error(`${pending.slot.toUpperCase()} 还没设置`);
+    throw new Error(`${slotDisplayName(pending.slot)} 还没设置`);
   }
   return {
     annotator_id: annotatorId(),
