@@ -21,13 +21,12 @@
 - 当前代码分区说明见：
   - [codes/README.md](/home/hrli/data_annotation/codes/README.md)
 
-当前正式 batch 基线是：
+当前 batch 口径是动态的：
 
-- `./annotation/batch_20260413_v01`
-- 当前推荐用于试运行最新 `human_stage_1` 行为与降本策略的派生 batch：
-  - `./annotation/batch_20260417_v01`
-  - 当前 `human_stage_1` 优化报告见：
-    - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
+- 运行命令时，请把 `./annotation/batch_<YYYYMMDD>_vNN` 替换为当前正在操作的 batch 目录
+- 历史分析或实验报告会引用各自实际使用的 batch
+- `human_stage_1` 的一份历史优化报告见：
+  - [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 
 ---
 
@@ -159,12 +158,14 @@ flowchart LR
 
 ## 常用命令
 
+下面命令里的 `./annotation/batch_<YYYYMMDD>_vNN` 只是占位写法，请替换成你当前正在操作的 batch。
+
 ### 1. 运行离线 human_stage_1 prep
 
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python codes/process/step2_stage1_prep/process_human_stage_1_prep.py \
-  --batch-dir ./annotation/batch_20260417_v01
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN
 ```
 
 ### 2. 启动 human_stage_1 服务
@@ -174,7 +175,7 @@ PYTHONPATH=codes .venv/bin/python codes/process/step2_stage1_prep/process_human_
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python codes/application/step3_human_stage_1/ui_human_stage_1_server.py \
-  --batch-dir ./annotation/batch_20260417_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10086
 ```
@@ -190,7 +191,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/step3_human_stage_1/ui_human
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_review_server.py \
-  --batch-dir ./annotation/batch_20260413_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10088
 ```
@@ -204,7 +205,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_revie
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python codes/application/support/ui_admin_server.py \
-  --batch-dir ./annotation/batch_20260413_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10087
 ```

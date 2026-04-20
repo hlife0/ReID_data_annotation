@@ -22,7 +22,7 @@ from process.step0_preprocess.prepare_capture_lib import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 DEFAULT_SOURCE_VIDEO = Path("/home/hrli/mid-run/data/video_raw/mp4/20260410_195433.mp4")
 DEFAULT_SOURCE_IMU_ROOT = Path(
     "/home/hrli/mid-run/data/imu_raw/inbox_from_fzliang/2026-04-10_from_fzliang_20260412_092814"

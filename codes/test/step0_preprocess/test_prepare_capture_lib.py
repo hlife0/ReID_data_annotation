@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from process.step0_preprocess.prepare_capture_lib import (
     active_devices_for_window,
@@ -14,6 +17,7 @@ from process.step0_preprocess.prepare_capture_lib import (
     merge_intervals,
     parse_capture_stem_start_ms,
     parse_time_of_day_to_epoch_ms,
+    clip_video_segment,
     slice_intervals_to_sessions,
 )
 
@@ -138,6 +142,29 @@ class BuildSegmentSessionTests(unittest.TestCase):
         self.assertEqual(session.stem, "20260410_195433_seg_200624895")
         self.assertEqual(session.start_ms, 1775822784900)
         self.assertEqual(session.end_ms, 1775823481295)
+
+
+class ClipVideoSegmentTests(unittest.TestCase):
+    def test_retries_when_ffmpeg_returns_success_but_output_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_video = Path(tmpdir) / "input.mp4"
+            output_video = Path(tmpdir) / "output.mp4"
+            input_video.write_bytes(b"fake")
+
+            run_calls = []
+
+            def fake_run(*args, **kwargs):
+                run_calls.append((args, kwargs))
+                if len(run_calls) == 2:
+                    output_video.write_bytes(b"ok")
+                return mock.Mock(returncode=0)
+
+            with mock.patch("process.step0_preprocess.prepare_capture_lib.shutil.which", return_value="/usr/bin/ffmpeg"):
+                with mock.patch("process.step0_preprocess.prepare_capture_lib.subprocess.run", side_effect=fake_run):
+                    clip_video_segment(input_video, output_video, 1.0, 2.0)
+
+            self.assertTrue(output_video.exists())
+            self.assertEqual(len(run_calls), 2)
 
 
 if __name__ == "__main__":

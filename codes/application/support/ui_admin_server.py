@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 def _now_human() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -443,7 +443,12 @@ class AdminHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Admin panel server for UI review database")
-    parser.add_argument("--batch-dir", type=Path, required=True, help="Batch directory path, e.g. ./annotation/batch_20260305_v03")
+    parser.add_argument(
+        "--batch-dir",
+        type=Path,
+        required=True,
+        help="Batch directory path, e.g. ./annotation/batch_<YYYYMMDD>_vNN",
+    )
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host")
     parser.add_argument("--port", type=int, default=10087, help="Bind port")
     return parser.parse_args()

@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 DEFAULT_TARGET_VIDEO_STEMS = [
     "20260211_171423",
@@ -2328,7 +2328,7 @@ def parse_args() -> argparse.Namespace:
         "--batch-dir",
         type=Path,
         required=True,
-        help="Batch directory path, e.g. ./annotation/batch_20260305_v03",
+        help="Batch directory path, e.g. ./annotation/batch_<YYYYMMDD>_vNN",
     )
     parser.add_argument(
         "--host",

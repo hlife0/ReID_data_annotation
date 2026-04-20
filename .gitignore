@@ -25,3 +25,4 @@ tools/
 # Misc
 *.log
 nohup.out
+codes/yolo_cfg/

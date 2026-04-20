@@ -2,6 +2,8 @@
 
 本文件描述当前 active 仓库中仍然保留的在线服务。
 
+下面命令里的 `./annotation/batch_<YYYYMMDD>_vNN` 只是占位写法，请替换成你当前正在操作的 batch。
+
 ---
 
 ## Step 3 服务：`human_stage_1`
@@ -32,7 +34,7 @@
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python \
   codes/application/step3_human_stage_1/ui_human_stage_1_server.py \
-  --batch-dir ./annotation/batch_20260417_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10086
 ```
@@ -66,7 +68,7 @@ PYTHONPATH=codes .venv/bin/python \
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python \
   codes/application/step5_stage2_review/ui_review_server.py \
-  --batch-dir ./annotation/batch_20260413_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10088
 ```
@@ -101,7 +103,7 @@ PYTHONPATH=codes .venv/bin/python \
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python \
   codes/application/support/ui_admin_server.py \
-  --batch-dir ./annotation/batch_20260413_v01 \
+  --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
   --port 10087
 ```

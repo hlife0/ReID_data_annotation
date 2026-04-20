@@ -567,4 +567,62 @@ def clip_video_segment(
         "yuv420p",
         str(output_video),
     ]
-    subprocess.run(command, check=True, capture_output=True, text=True)
+    quiet_command = [
+        "ffmpeg",
+        "-loglevel",
+        "error",
+        "-nostats",
+        "-y",
+        "-ss",
+        f"{offset_seconds:.3f}",
+        "-i",
+        str(input_video),
+        "-t",
+        f"{duration_seconds:.3f}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_video),
+    ]
+    debug_command = [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{offset_seconds:.3f}",
+        "-i",
+        str(input_video),
+        "-t",
+        f"{duration_seconds:.3f}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_video),
+    ]
+    for attempt in range(2):
+        if output_video.exists():
+            output_video.unlink()
+        try:
+            subprocess.run(
+                quiet_command,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except subprocess.CalledProcessError:
+            if attempt == 0:
+                continue
+            result = subprocess.run(debug_command, check=False, capture_output=True, text=True)
+            raise RuntimeError(
+                f"ffmpeg failed for output video: {output_video}\n"
+                f"returncode={result.returncode}\n"
+                f"stderr:\n{result.stderr}"
+            )
+        if output_video.exists() and output_video.stat().st_size > 0:
+            return
+    raise RuntimeError(
+        f"ffmpeg finished without creating output video: {output_video}\n"
+        "stderr:\n(output suppressed in quiet mode; ffmpeg returned success twice but file is still missing)"
+    )

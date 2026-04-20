@@ -658,7 +658,7 @@ def parse_args() -> argparse.Namespace:
         "--batch-dir",
         type=Path,
         required=True,
-        help="Batch directory, e.g. ./annotation/batch_20260413_v01",
+        help="Batch directory, e.g. ./annotation/batch_<YYYYMMDD>_vNN",
     )
     parser.add_argument(
         "--low-score-threshold",
