@@ -90,6 +90,18 @@ class SegmentRecord:
     source_segment_types: List[str]
 
 
+@dataclass(frozen=True)
+class QueueRecord:
+    queue_id: int
+    segment_id: str
+    pass_index: int
+    queue_order: int
+    status: str
+    annotation_id: str
+    completed_by: str
+    completed_at: str
+
+
 class HumanStage1State:
     def __init__(
         self,
@@ -117,6 +129,7 @@ class HumanStage1State:
         self.ai_boxes: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
         self.segment_pool: List[SegmentRecord] = []
         self.segment_lookup: Dict[str, SegmentRecord] = {}
+        self.queue_lookup: Dict[int, QueueRecord] = {}
         self.reader: VideoFrameReader | None = None
 
     def initialize(self) -> None:
@@ -135,6 +148,8 @@ class HumanStage1State:
         self.segment_lookup = {segment.segment_id: segment for segment in self.segment_pool}
         self._init_database()
         self._init_assignment_log()
+        self._init_assignment_queue()
+        self.queue_lookup = self._load_queue_lookup()
         self.reader = VideoFrameReader(self.video_paths)
 
     def close(self) -> None:
@@ -143,13 +158,15 @@ class HumanStage1State:
             self.reader = None
 
     def assign_next_segment(self, annotator_id: str) -> Dict[str, Any]:
-        completed_segment_ids = self._completed_segment_ids_for_annotator(annotator_id)
-        for segment in self.segment_pool:
-            if segment.segment_id not in completed_segment_ids:
-                payload = self._segment_payload(segment)
-                self._append_assignment_log(annotator_id, payload["segment"]["segment_id"])
-                return payload
-        raise ValueError("no stage-1 segments remaining")
+        queue_item = self._next_pending_queue_item()
+        if queue_item is None:
+            raise ValueError("no stage-1 segments remaining")
+        segment = self.segment_lookup.get(queue_item.segment_id)
+        if segment is None:
+            raise ValueError("segment not found")
+        payload = self._segment_payload(segment, queue_item=queue_item)
+        self._append_assignment_log(annotator_id, payload["segment"]["segment_id"])
+        return payload
 
     def segment_detail(self, segment_id: str) -> Dict[str, Any]:
         segment = self.segment_lookup.get(segment_id)
@@ -172,6 +189,15 @@ class HumanStage1State:
             raise ValueError("video_stem mismatch")
         if int(payload.get("frame_index", 0)) != segment.representative_frame:
             raise ValueError("frame_index must target the representative frame")
+        try:
+            queue_id = int(payload.get("queue_id", 0))
+        except Exception as exc:
+            raise ValueError("queue_id is required") from exc
+        queue_item = self._queue_item_by_id(queue_id)
+        if queue_item is None:
+            raise ValueError("queue_id not found")
+        if queue_item.segment_id != segment.segment_id:
+            raise ValueError("queue_id does not match segment_id")
 
         slot_decisions = self._validate_slot_decisions(
             video_stem=segment.video_stem,
@@ -215,9 +241,29 @@ class HumanStage1State:
                     record["slot_decisions_json"],
                 ),
             )
+            cursor = conn.execute(
+                """
+                UPDATE stage1_assignment_queue
+                SET status='completed', annotation_id=?, completed_by=?, completed_at=?
+                WHERE queue_id=? AND status='pending'
+                """,
+                (record["annotation_id"], annotator_id, record["submitted_at"], queue_id),
+            )
             conn.commit()
         finally:
             conn.close()
+        queue_completed = cursor.rowcount > 0
+        if queue_completed:
+            self.queue_lookup[queue_id] = QueueRecord(
+                queue_id=queue_item.queue_id,
+                segment_id=queue_item.segment_id,
+                pass_index=queue_item.pass_index,
+                queue_order=queue_item.queue_order,
+                status="completed",
+                annotation_id=record["annotation_id"],
+                completed_by=annotator_id,
+                completed_at=record["submitted_at"],
+            )
 
         (self.raw_dir / f"{record['annotation_id']}.json").write_text(
             json.dumps(record, ensure_ascii=False, indent=2),
@@ -228,6 +274,8 @@ class HumanStage1State:
             "segment_id": segment.segment_id,
             "frame_index": segment.representative_frame,
             "submitted_slot_count": len(slot_decisions),
+            "queue_id": queue_id,
+            "queue_completed": queue_completed,
         }
 
     def list_annotations_for_annotator(self, annotator_id: str) -> List[Dict[str, Any]]:
@@ -349,9 +397,9 @@ class HumanStage1State:
             raw_path.write_text(json.dumps(raw_payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return {"annotation_id": annotation_id, "updated_slot_count": len(slot_decisions)}
 
-    def _segment_payload(self, segment: SegmentRecord) -> Dict[str, Any]:
+    def _segment_payload(self, segment: SegmentRecord, queue_item: QueueRecord | None = None) -> Dict[str, Any]:
         frame_index = segment.representative_frame
-        return {
+        payload = {
             "segment": {
                 "segment_id": segment.segment_id,
                 "video_stem": segment.video_stem,
@@ -380,6 +428,14 @@ class HumanStage1State:
             "allowed_decisions": ALLOWED_DECISIONS,
             "manual_draw_enabled": False,
         }
+        if queue_item is not None:
+            payload["queue"] = {
+                "queue_id": queue_item.queue_id,
+                "pass_index": queue_item.pass_index,
+                "queue_order": queue_item.queue_order,
+                "status": queue_item.status,
+            }
+        return payload
 
     def _validate_slot_decisions(
         self,
@@ -435,16 +491,65 @@ class HumanStage1State:
             )
         return validated
 
-    def _completed_segment_ids_for_annotator(self, annotator_id: str) -> set[str]:
+    def _queue_record_from_row(self, row: sqlite3.Row | tuple[Any, ...] | None) -> QueueRecord | None:
+        if row is None:
+            return None
+        return QueueRecord(
+            queue_id=int(row["queue_id"] if isinstance(row, sqlite3.Row) else row[0]),
+            segment_id=str(row["segment_id"] if isinstance(row, sqlite3.Row) else row[1]),
+            pass_index=int(row["pass_index"] if isinstance(row, sqlite3.Row) else row[2]),
+            queue_order=int(row["queue_order"] if isinstance(row, sqlite3.Row) else row[3]),
+            status=str(row["status"] if isinstance(row, sqlite3.Row) else row[4]),
+            annotation_id=str(row["annotation_id"] if isinstance(row, sqlite3.Row) else row[5]),
+            completed_by=str(row["completed_by"] if isinstance(row, sqlite3.Row) else row[6]),
+            completed_at=str(row["completed_at"] if isinstance(row, sqlite3.Row) else row[7]),
+        )
+
+    def _next_pending_queue_item(self) -> QueueRecord | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT queue_id, segment_id, pass_index, queue_order, status, annotation_id, completed_by, completed_at
+                FROM stage1_assignment_queue
+                WHERE status='pending'
+                ORDER BY queue_order ASC
+                LIMIT 1
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._queue_record_from_row(row)
+
+    def _queue_item_by_id(self, queue_id: int) -> QueueRecord | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT queue_id, segment_id, pass_index, queue_order, status, annotation_id, completed_by, completed_at
+                FROM stage1_assignment_queue
+                WHERE queue_id=?
+                """,
+                (queue_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._queue_record_from_row(row)
+
+    def _load_queue_lookup(self) -> Dict[int, QueueRecord]:
         conn = self._connect()
         try:
             rows = conn.execute(
-                "SELECT segment_id FROM coarse_labels WHERE annotator_id=?",
-                (annotator_id,),
+                """
+                SELECT queue_id, segment_id, pass_index, queue_order, status, annotation_id, completed_by, completed_at
+                FROM stage1_assignment_queue
+                ORDER BY queue_order ASC
+                """
             ).fetchall()
         finally:
             conn.close()
-        return {str(row[0]) for row in rows}
+        records = [self._queue_record_from_row(row) for row in rows]
+        return {record.queue_id: record for record in records if record is not None}
 
     def _load_manifest_assets(self) -> Tuple[Dict[str, Path], Dict[str, Path]]:
         video_paths: Dict[str, Path] = {}
@@ -621,6 +726,92 @@ class HumanStage1State:
         with self.assignment_log_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["assigned_at", "annotator_id", "segment_id"])
+
+    def _init_assignment_queue(self) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS stage1_assignment_queue (
+                    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    segment_id TEXT NOT NULL,
+                    video_stem TEXT NOT NULL,
+                    pass_index INTEGER NOT NULL,
+                    queue_order INTEGER NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    annotation_id TEXT NOT NULL DEFAULT '',
+                    completed_by TEXT NOT NULL DEFAULT '',
+                    completed_at TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            queue_count = int(
+                conn.execute("SELECT COUNT(*) FROM stage1_assignment_queue").fetchone()[0]
+            )
+            if queue_count == 0:
+                queue_rows: List[tuple[str, str, int, int, str]] = []
+                queue_order = 1
+                for pass_index in (1, 2):
+                    for segment in self.segment_pool:
+                        queue_rows.append(
+                            (
+                                segment.segment_id,
+                                segment.video_stem,
+                                pass_index,
+                                queue_order,
+                                "pending",
+                            )
+                        )
+                        queue_order += 1
+                conn.executemany(
+                    """
+                    INSERT INTO stage1_assignment_queue (
+                        segment_id,
+                        video_stem,
+                        pass_index,
+                        queue_order,
+                        status
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    queue_rows,
+                )
+                historical_rows = conn.execute(
+                    """
+                    SELECT annotation_id, segment_id, annotator_id, submitted_at
+                    FROM coarse_labels
+                    ORDER BY submitted_at ASC, annotation_id ASC
+                    """
+                ).fetchall()
+                for row in historical_rows:
+                    pending_queue_row = conn.execute(
+                        """
+                        SELECT queue_id
+                        FROM stage1_assignment_queue
+                        WHERE segment_id=? AND status='pending'
+                        ORDER BY queue_order ASC
+                        LIMIT 1
+                        """,
+                        (str(row["segment_id"]),),
+                    ).fetchone()
+                    if pending_queue_row is None:
+                        continue
+                    conn.execute(
+                        """
+                        UPDATE stage1_assignment_queue
+                        SET status='completed', annotation_id=?, completed_by=?, completed_at=?
+                        WHERE queue_id=?
+                        """,
+                        (
+                            str(row["annotation_id"]),
+                            str(row["annotator_id"]),
+                            str(row["submitted_at"]),
+                            int(pending_queue_row["queue_id"]),
+                        ),
+                    )
+            conn.commit()
+        finally:
+            conn.close()
 
     def _append_assignment_log(self, annotator_id: str, segment_id: str) -> None:
         with self.assignment_log_path.open("a", newline="", encoding="utf-8") as f:

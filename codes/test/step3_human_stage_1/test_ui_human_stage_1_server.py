@@ -271,6 +271,26 @@ class HumanStage1ServerTests(unittest.TestCase):
             writer.write(frame)
         writer.release()
 
+    def _submit_next_segment(
+        self,
+        state,
+        annotator_id: str,
+        slot_decisions: list[dict[str, str]],
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        payload = state.assign_next_segment(annotator_id)
+        result = state.submit_segment(
+            annotator_id,
+            payload["segment"]["segment_id"],
+            {
+                "queue_id": payload["queue"]["queue_id"],
+                "segment_id": payload["segment"]["segment_id"],
+                "video_stem": payload["segment"]["video_stem"],
+                "frame_index": payload["frame"]["frame_index"],
+                "slot_decisions": slot_decisions,
+            },
+        )
+        return payload, result
+
     def test_human_stage_1_server_reads_human_stage_1_prep_only(self) -> None:
         state = self._make_state()
 
@@ -453,44 +473,29 @@ class HumanStage1ServerTests(unittest.TestCase):
 
     def test_human_stage_1_server_returns_history_based_recommendations(self) -> None:
         state = self._make_state()
-        state.submit_segment(
+        self._submit_next_segment(
+            state,
             "annotator_history_a",
-            "sample_stage1_seg_000001",
-            {
-                "segment_id": "sample_stage1_seg_000001",
-                "video_stem": "sample",
-                "frame_index": 2,
-                "slot_decisions": [
-                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
-                    {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
-                ],
-            },
+            [
+                {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
+            ],
         )
-        state.submit_segment(
+        self._submit_next_segment(
+            state,
             "annotator_history_b",
-            "sample_stage1_seg_000002",
-            {
-                "segment_id": "sample_stage1_seg_000002",
-                "video_stem": "sample",
-                "frame_index": 5,
-                "slot_decisions": [
-                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
-                    {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
-                ],
-            },
+            [
+                {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                {"slot": "p2", "decision_type": "ai_match", "ai_track_id": "12"},
+            ],
         )
-        state.submit_segment(
+        self._submit_next_segment(
+            state,
             "annotator_history_c",
-            "sample_stage1_seg_000002",
-            {
-                "segment_id": "sample_stage1_seg_000002",
-                "video_stem": "sample",
-                "frame_index": 5,
-                "slot_decisions": [
-                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "12"},
-                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
-                ],
-            },
+            [
+                {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "12"},
+                {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+            ],
         )
 
         payload = state.assign_next_segment("annotator_stage1")
@@ -504,22 +509,17 @@ class HumanStage1ServerTests(unittest.TestCase):
     def test_human_stage_1_server_persists_ai_match_absent_needs_manual(self) -> None:
         state = self._make_state()
 
-        result = state.submit_segment(
+        payload, result = self._submit_next_segment(
+            state,
             "annotator_stage1",
-            "sample_stage1_seg_000001",
-            {
-                "segment_id": "sample_stage1_seg_000001",
-                "video_stem": "sample",
-                "frame_index": 2,
-                "slot_decisions": [
-                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
-                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
-                    {"slot": "p3", "decision_type": "needs_manual", "ai_track_id": ""},
-                ],
-            },
+            [
+                {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+                {"slot": "p3", "decision_type": "needs_manual", "ai_track_id": ""},
+            ],
         )
 
-        self.assertEqual(result["segment_id"], "sample_stage1_seg_000001")
+        self.assertEqual(result["segment_id"], payload["segment"]["segment_id"])
         self.assertEqual(result["frame_index"], 2)
         self.assertEqual(result["submitted_slot_count"], 3)
         with closing(sqlite3.connect(state.db_path)) as conn:
@@ -547,23 +547,18 @@ class HumanStage1ServerTests(unittest.TestCase):
 
     def test_human_stage_1_server_lists_annotation_history_and_detail(self) -> None:
         state = self._make_state()
-        result = state.submit_segment(
+        payload, result = self._submit_next_segment(
+            state,
             "annotator_stage1",
-            "sample_stage1_seg_000001",
-            {
-                "segment_id": "sample_stage1_seg_000001",
-                "video_stem": "sample",
-                "frame_index": 2,
-                "slot_decisions": [
-                    {
-                        "slot": "p1",
-                        "decision_type": "ai_match",
-                        "ai_track_id": "11",
-                        "selection_source": "recommended_confirmed",
-                    },
-                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
-                ],
-            },
+            [
+                {
+                    "slot": "p1",
+                    "decision_type": "ai_match",
+                    "ai_track_id": "11",
+                    "selection_source": "recommended_confirmed",
+                },
+                {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+            ],
         )
 
         history = state.list_annotations_for_annotator("annotator_stage1")
@@ -574,28 +569,23 @@ class HumanStage1ServerTests(unittest.TestCase):
 
         detail = state.annotation_detail("annotator_stage1", result["annotation_id"])
         self.assertEqual(detail["annotation"]["annotation_id"], result["annotation_id"])
-        self.assertEqual(detail["frame"]["frame_index"], 2)
+        self.assertEqual(detail["frame"]["frame_index"], payload["frame"]["frame_index"])
         self.assertEqual(detail["annotation"]["slot_decisions"][0]["slot"], "p1")
 
     def test_human_stage_1_server_uses_named_slot_labels_in_history_summary(self) -> None:
         state = self._make_state()
-        result = state.submit_segment(
+        _payload, result = self._submit_next_segment(
+            state,
             "annotator_stage1",
-            "sample_stage1_seg_000001",
-            {
-                "segment_id": "sample_stage1_seg_000001",
-                "video_stem": "sample",
-                "frame_index": 2,
-                "slot_decisions": [
-                    {
-                        "slot": "p1",
-                        "decision_type": "ai_match",
-                        "ai_track_id": "11",
-                        "selection_source": "recommended_confirmed",
-                    },
-                    {"slot": "p8", "decision_type": "absent", "ai_track_id": ""},
-                ],
-            },
+            [
+                {
+                    "slot": "p1",
+                    "decision_type": "ai_match",
+                    "ai_track_id": "11",
+                    "selection_source": "recommended_confirmed",
+                },
+                {"slot": "p8", "decision_type": "absent", "ai_track_id": ""},
+            ],
         )
 
         history = state.list_annotations_for_annotator("annotator_stage1")
@@ -606,31 +596,26 @@ class HumanStage1ServerTests(unittest.TestCase):
 
     def test_human_stage_1_server_updates_existing_annotation(self) -> None:
         state = self._make_state()
-        result = state.submit_segment(
+        payload, result = self._submit_next_segment(
+            state,
             "annotator_stage1",
-            "sample_stage1_seg_000001",
-            {
-                "segment_id": "sample_stage1_seg_000001",
-                "video_stem": "sample",
-                "frame_index": 2,
-                "slot_decisions": [
-                    {
-                        "slot": "p1",
-                        "decision_type": "ai_match",
-                        "ai_track_id": "11",
-                        "selection_source": "manual_selected",
-                    },
-                    {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
-                ],
-            },
+            [
+                {
+                    "slot": "p1",
+                    "decision_type": "ai_match",
+                    "ai_track_id": "11",
+                    "selection_source": "manual_selected",
+                },
+                {"slot": "p2", "decision_type": "absent", "ai_track_id": ""},
+            ],
         )
 
         update_result = state.update_annotation(
             "annotator_stage1",
             {
                 "annotation_id": result["annotation_id"],
-                "video_stem": "sample",
-                "frame_index": 2,
+                "video_stem": payload["segment"]["video_stem"],
+                "frame_index": payload["frame"]["frame_index"],
                 "slot_decisions": [
                     {
                         "slot": "p1",
