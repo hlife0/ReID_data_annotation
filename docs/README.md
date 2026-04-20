@@ -270,6 +270,7 @@ node --check codes/application/support/admin_web/app.js
 它当前的心智模型是：
 
 - 上面一排 `P1(赵宇轩)` 到 `P8(谢灵韵)` 槽位按钮
+- 派单使用全局共享队列：所有 segment 先完整排一遍，再完整排第二遍，只有提交成功才会推进队列
 - 下面只编辑当前槽位
 - 每个槽位只允许：
   - `ai_match`
