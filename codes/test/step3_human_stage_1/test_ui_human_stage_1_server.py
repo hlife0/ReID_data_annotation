@@ -328,6 +328,51 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertFalse(stable_payload.get("manual_draw_enabled", False))
         self.assertFalse(repair_payload.get("manual_draw_enabled", False))
 
+    def test_human_stage_1_server_reports_annotator_progress_in_frames(self) -> None:
+        state = self._make_state()
+
+        self._submit_next_segment(
+            state,
+            "annotator_stage1",
+            [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
+        )
+        self._submit_next_segment(
+            state,
+            "annotator_stage1",
+            [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
+        )
+
+        payload = state.assign_next_segment("annotator_stage1")
+
+        self.assertEqual(payload["annotator_progress"]["completed_frames"], 6)
+        self.assertEqual(payload["annotator_progress"]["target_frames"], 2600)
+        self.assertAlmostEqual(payload["annotator_progress"]["ratio"], 6 / 2600, places=6)
+
+    def test_human_stage_1_server_edit_does_not_increase_progress(self) -> None:
+        state = self._make_state()
+        payload, result = self._submit_next_segment(
+            state,
+            "annotator_stage1",
+            [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
+        )
+
+        before = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_frames"]
+
+        state.update_annotation(
+            "annotator_stage1",
+            {
+                "annotation_id": result["annotation_id"],
+                "video_stem": payload["segment"]["video_stem"],
+                "frame_index": payload["frame"]["frame_index"],
+                "slot_decisions": [{"slot": "p1", "decision_type": "absent", "ai_track_id": ""}],
+            },
+        )
+
+        after = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_frames"]
+
+        self.assertEqual(before, 3)
+        self.assertEqual(after, 3)
+
     def test_human_stage_1_server_initializes_global_queue_with_two_passes(self) -> None:
         state = self._make_state()
 
