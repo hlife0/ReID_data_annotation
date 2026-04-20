@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>human_stage_1 后台监控</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div>
+          <h1>human_stage_1 后台监控</h1>
+          <p>端口 10087：stage1 队列、annotator 工作量、最近提交、segment 明细</p>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="btn">刷新数据</button>
+        </div>
+      </header>
+
+      <section class="metric-grid">
+        <div class="metric-card"><div class="metric-label">总 segment 数</div><div id="mSegmentCount" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">队列总数</div><div id="mQueueTotal" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">队列已完成</div><div id="mQueueCompleted" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">队列待完成</div><div id="mQueuePending" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">Pass 1 已完成</div><div id="mPass1Completed" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">Pass 2 已完成</div><div id="mPass2Completed" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">总提交数</div><div id="mAnnotationCount" class="metric-value">-</div></div>
+        <div class="metric-card"><div class="metric-label">Annotator 数</div><div id="mAnnotatorCount" class="metric-value">-</div></div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <h2>Segment 被标注次数分布</h2>
+          <p class="hint">按 0 / 1 / 2 / 3+ 次统计</p>
+          <div id="segmentCountChart" class="bar-chart"></div>
+        </article>
+        <article class="panel">
+          <h2>每个 Annotator 已提交帧数</h2>
+          <p class="hint">按 completed_frames 降序</p>
+          <div id="annotatorProgressChart" class="bar-chart"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Annotator 总览</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>annotator</th>
+                <th>提交数</th>
+                <th>已提交帧数</th>
+                <th>进度 / 2600</th>
+                <th>最近提交时间</th>
+              </tr>
+            </thead>
+            <tbody id="annotatorBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>最近提交记录</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>annotation_id</th>
+                <th>annotator</th>
+                <th>segment_id</th>
+                <th>pass</th>
+                <th>frame</th>
+                <th>submitted_at</th>
+                <th>slots_summary</th>
+              </tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Segment 明细查询</h2>
+        <div class="query-row">
+          <label>
+            <span>Segment</span>
+            <select id="segmentIdSelect"></select>
+          </label>
+          <button id="querySegmentBtn" class="btn">查询 segment 明细</button>
+        </div>
+        <div id="segmentSummary" class="segment-summary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>type</th>
+                <th>id</th>
+                <th>pass</th>
+                <th>queue_order</th>
+                <th>status</th>
+                <th>annotator</th>
+                <th>timestamp / summary</th>
+              </tr>
+            </thead>
+            <tbody id="segmentDetailBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
