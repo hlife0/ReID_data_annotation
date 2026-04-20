@@ -12,6 +12,7 @@ const DEFAULT_SLOT_DISPLAY_NAMES = {
 const ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"];
 const ANNOTATOR_STORAGE_KEY = "human_stage_1_annotator_id";
 const HISTORY_COLLAPSED_KEY = "human_stage_1_history_collapsed";
+const DEFAULT_ANNOTATOR_ID = "annotator_demo";
 
 const refs = {
   annotatorId: document.getElementById("annotatorId"),
@@ -40,6 +41,11 @@ const refs = {
   refreshHistoryBtn: document.getElementById("refreshHistoryBtn"),
   saveEditBtn: document.getElementById("saveEditBtn"),
   exitEditBtn: document.getElementById("exitEditBtn"),
+  annotatorModal: document.getElementById("annotatorModal"),
+  annotatorModalCloseBtn: document.getElementById("annotatorModalCloseBtn"),
+  annotatorModalInput: document.getElementById("annotatorModalInput"),
+  annotatorModalSubmitBtn: document.getElementById("annotatorModalSubmitBtn"),
+  annotatorModalHint: document.getElementById("annotatorModalHint"),
   toast: document.getElementById("toast"),
 };
 
@@ -54,10 +60,54 @@ const state = {
   editing: false,
   editingAnnotationId: "",
   lastAssignedTask: null,
+  initialTaskRequested: false,
 };
 
 function annotatorId() {
-  return refs.annotatorId.value.trim() || "annotator_demo";
+  return refs.annotatorId.value.trim() || DEFAULT_ANNOTATOR_ID;
+}
+
+function getStoredAnnotatorId() {
+  return localStorage.getItem(ANNOTATOR_STORAGE_KEY) || "";
+}
+
+function shouldPromptAnnotatorModal(value) {
+  const normalized = String(value || "").trim();
+  return !normalized || normalized === DEFAULT_ANNOTATOR_ID;
+}
+
+function closeAnnotatorModalAndContinue() {
+  refs.annotatorModal.hidden = true;
+  refs.annotatorModalHint.textContent = "";
+  requestInitialTaskOnce();
+}
+
+function submitAnnotatorModal() {
+  const value = refs.annotatorModalInput.value.trim();
+  if (!value) {
+    refs.annotatorModalHint.textContent = "请输入非空标注员ID，或点击右上角关闭继续使用默认值。";
+    return;
+  }
+  refs.annotatorId.value = value;
+  localStorage.setItem(ANNOTATOR_STORAGE_KEY, value);
+  closeAnnotatorModalAndContinue();
+  showToast(`已设置标注员ID：${value}`);
+}
+
+function maybePromptAnnotatorModal() {
+  const storedId = getStoredAnnotatorId();
+  if (!shouldPromptAnnotatorModal(storedId)) return false;
+  refs.annotatorModal.hidden = false;
+  refs.annotatorModalHint.textContent = "";
+  refs.annotatorModalInput.value = "";
+  setTimeout(() => refs.annotatorModalInput.focus(), 0);
+  return true;
+}
+
+function requestInitialTaskOnce() {
+  if (state.initialTaskRequested) return;
+  state.initialTaskRequested = true;
+  loadNextSegment().catch((error) => showToast(error.message, true));
 }
 
 function showToast(message, isError = false) {
@@ -510,7 +560,7 @@ function toggleHistoryDock() {
 }
 
 function initEvents() {
-  refs.annotatorId.value = localStorage.getItem(ANNOTATOR_STORAGE_KEY) || "annotator_demo";
+  refs.annotatorId.value = getStoredAnnotatorId() || DEFAULT_ANNOTATOR_ID;
   refs.annotatorId.addEventListener("change", () => {
     localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
     loadHistory({ silent: true });
@@ -526,13 +576,27 @@ function initEvents() {
   refs.saveEditBtn.addEventListener("click", () => saveEdit());
   refs.exitEditBtn.addEventListener("click", exitEditMode);
   refs.historyToggleBtn.addEventListener("click", toggleHistoryDock);
+  refs.annotatorModalCloseBtn.addEventListener("click", closeAnnotatorModalAndContinue);
+  refs.annotatorModalSubmitBtn.addEventListener("click", submitAnnotatorModal);
+  refs.annotatorModalInput.addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      submitAnnotatorModal();
+    } else if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeAnnotatorModalAndContinue();
+    }
+  });
 }
 
 function init() {
   initHistoryDock();
   initEvents();
   loadHistory({ silent: true });
-  loadNextSegment().catch((error) => showToast(error.message, true));
+  const prompted = maybePromptAnnotatorModal();
+  if (!prompted) {
+    requestInitialTaskOnce();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", init);
