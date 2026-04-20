@@ -341,18 +341,25 @@ function buildSubmitPayload() {
   if (!state.task) {
     throw new Error("当前没有任务");
   }
+  if (!state.editing && !state.task?.queue?.queue_id) {
+    throw new Error("当前任务缺少 queue_id");
+  }
   const slot_decisions = state.slotNames.map((slot) => state.slotDecisions.get(slot));
   const pending = slot_decisions.find((item) => !item || item.decision_type === "pending");
   if (pending) {
     throw new Error(`${slotDisplayName(pending.slot)} 还没设置`);
   }
-  return {
+  const payload = {
     annotator_id: annotatorId(),
     segment_id: state.task.segment.segment_id,
     video_stem: state.task.segment.video_stem,
     frame_index: state.task.frame.frame_index,
     slot_decisions: slot_decisions.filter((item) => ALLOWED_DECISIONS.includes(item.decision_type)),
   };
+  if (!state.editing && state.task?.queue?.queue_id) {
+    payload.queue_id = state.task.queue.queue_id;
+  }
+  return payload;
 }
 
 async function submitCurrent() {
