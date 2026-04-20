@@ -214,16 +214,53 @@ class HumanStage1ServerTests(unittest.TestCase):
     def _subject_module(self):
         return importlib.import_module("application.step3_human_stage_1.ui_human_stage_1_server")
 
-    def _make_state(self):
+    def _make_state(self, reset_storage: bool = True):
         mod = self._subject_module()
         state = mod.HumanStage1State(
             batch_dir=self.batch_dir,
             static_dir=Path("codes/application/step3_human_stage_1/web"),
             seed=123,
-            reset_storage=True,
+            reset_storage=reset_storage,
         )
         state.initialize()
         return state
+
+    def _seed_legacy_stage1_db(self, rows: list[tuple[str, str, str, str, int, str, str, str]]) -> None:
+        stage1_dir = self.batch_dir / "human_stage_1"
+        stage1_dir.mkdir(parents=True, exist_ok=True)
+        db_path = stage1_dir / "ui_human_stage_1.sqlite3"
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS coarse_labels (
+                    annotation_id TEXT PRIMARY KEY,
+                    segment_id TEXT NOT NULL,
+                    segment_type TEXT NOT NULL,
+                    video_stem TEXT NOT NULL,
+                    frame_index INTEGER NOT NULL,
+                    annotator_id TEXT NOT NULL,
+                    submitted_at TEXT NOT NULL,
+                    slot_decisions_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.executemany(
+                """
+                INSERT INTO coarse_labels (
+                    annotation_id,
+                    segment_id,
+                    segment_type,
+                    video_stem,
+                    frame_index,
+                    annotator_id,
+                    submitted_at,
+                    slot_decisions_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
 
     def _write_video(self, path: Path) -> None:
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -270,6 +307,149 @@ class HumanStage1ServerTests(unittest.TestCase):
         )
         self.assertFalse(stable_payload.get("manual_draw_enabled", False))
         self.assertFalse(repair_payload.get("manual_draw_enabled", False))
+
+    def test_human_stage_1_server_initializes_global_queue_with_two_passes(self) -> None:
+        state = self._make_state()
+
+        with closing(sqlite3.connect(state.db_path)) as conn:
+            rows = conn.execute(
+                """
+                SELECT segment_id, pass_index, queue_order, status
+                FROM stage1_assignment_queue
+                ORDER BY queue_order ASC
+                """
+            ).fetchall()
+
+        self.assertEqual(
+            rows,
+            [
+                ("sample_stage1_seg_000001", 1, 1, "pending"),
+                ("sample_stage1_seg_000002", 1, 2, "pending"),
+                ("sample_stage1_seg_000001", 2, 3, "pending"),
+                ("sample_stage1_seg_000002", 2, 4, "pending"),
+            ],
+        )
+
+    def test_human_stage_1_server_assigns_same_global_item_to_multiple_annotators_before_submit(self) -> None:
+        state = self._make_state()
+
+        payload_a = state.assign_next_segment("annotator_a")
+        payload_b = state.assign_next_segment("annotator_b")
+
+        self.assertEqual(payload_a["queue"]["queue_id"], payload_b["queue"]["queue_id"])
+        self.assertEqual(payload_a["queue"]["pass_index"], 1)
+        self.assertEqual(payload_a["segment"]["segment_id"], "sample_stage1_seg_000001")
+
+    def test_human_stage_1_server_advances_global_queue_only_after_submit(self) -> None:
+        state = self._make_state()
+
+        payload = state.assign_next_segment("annotator_a")
+        state.submit_segment(
+            "annotator_a",
+            payload["segment"]["segment_id"],
+            {
+                "queue_id": payload["queue"]["queue_id"],
+                "segment_id": payload["segment"]["segment_id"],
+                "video_stem": payload["segment"]["video_stem"],
+                "frame_index": payload["frame"]["frame_index"],
+                "slot_decisions": [
+                    {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+                ],
+            },
+        )
+
+        next_payload = state.assign_next_segment("annotator_b")
+
+        self.assertEqual(next_payload["segment"]["segment_id"], "sample_stage1_seg_000002")
+        self.assertEqual(next_payload["queue"]["pass_index"], 1)
+
+    def test_human_stage_1_server_allows_same_annotator_to_receive_second_pass(self) -> None:
+        state = self._make_state()
+
+        first = state.assign_next_segment("annotator_a")
+        state.submit_segment(
+            "annotator_a",
+            first["segment"]["segment_id"],
+            {
+                "queue_id": first["queue"]["queue_id"],
+                "segment_id": first["segment"]["segment_id"],
+                "video_stem": first["segment"]["video_stem"],
+                "frame_index": first["frame"]["frame_index"],
+                "slot_decisions": [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
+            },
+        )
+        second = state.assign_next_segment("annotator_a")
+        state.submit_segment(
+            "annotator_a",
+            second["segment"]["segment_id"],
+            {
+                "queue_id": second["queue"]["queue_id"],
+                "segment_id": second["segment"]["segment_id"],
+                "video_stem": second["segment"]["video_stem"],
+                "frame_index": second["frame"]["frame_index"],
+                "slot_decisions": [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
+            },
+        )
+
+        third = state.assign_next_segment("annotator_a")
+
+        self.assertEqual(third["segment"]["segment_id"], "sample_stage1_seg_000001")
+        self.assertEqual(third["queue"]["pass_index"], 2)
+
+    def test_human_stage_1_server_accepts_duplicate_submit_without_advancing_twice(self) -> None:
+        state = self._make_state()
+
+        payload = state.assign_next_segment("annotator_a")
+        submit_payload = {
+            "queue_id": payload["queue"]["queue_id"],
+            "segment_id": payload["segment"]["segment_id"],
+            "video_stem": payload["segment"]["video_stem"],
+            "frame_index": payload["frame"]["frame_index"],
+            "slot_decisions": [
+                {"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"},
+            ],
+        }
+
+        first = state.submit_segment("annotator_a", payload["segment"]["segment_id"], submit_payload)
+        second = state.submit_segment("annotator_b", payload["segment"]["segment_id"], submit_payload)
+
+        self.assertEqual(first["queue_completed"], True)
+        self.assertEqual(second["queue_completed"], False)
+
+        next_payload = state.assign_next_segment("annotator_c")
+        self.assertEqual(next_payload["segment"]["segment_id"], "sample_stage1_seg_000002")
+
+    def test_human_stage_1_server_migrates_existing_annotations_into_queue_progress(self) -> None:
+        self._seed_legacy_stage1_db(
+            [
+                (
+                    "legacy_a",
+                    "sample_stage1_seg_000001",
+                    "stable_segment",
+                    "sample",
+                    2,
+                    "annotator_a",
+                    "2026-04-21T10:00:00.000",
+                    json.dumps([{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}], ensure_ascii=False),
+                ),
+                (
+                    "legacy_b",
+                    "sample_stage1_seg_000001",
+                    "stable_segment",
+                    "sample",
+                    2,
+                    "annotator_b",
+                    "2026-04-21T10:00:01.000",
+                    json.dumps([{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}], ensure_ascii=False),
+                ),
+            ]
+        )
+
+        state = self._make_state(reset_storage=False)
+        next_payload = state.assign_next_segment("annotator_c")
+
+        self.assertEqual(next_payload["segment"]["segment_id"], "sample_stage1_seg_000002")
+        self.assertEqual(next_payload["queue"]["pass_index"], 1)
 
     def test_human_stage_1_server_returns_history_based_recommendations(self) -> None:
         state = self._make_state()
