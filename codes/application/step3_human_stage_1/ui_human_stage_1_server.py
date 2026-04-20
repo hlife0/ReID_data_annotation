@@ -19,7 +19,7 @@ from application.support.video_frame_reader import VideoFrameReader
 from process.shared import segment_prep_common as common
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 SLOT_CONFIG = [
     ("p1", "P1(赵宇轩)"),
     ("p2", "P2(张络屹)"),
