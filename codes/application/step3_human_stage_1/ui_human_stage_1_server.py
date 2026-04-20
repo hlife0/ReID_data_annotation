@@ -870,6 +870,18 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/next_segment":
             self._handle_next_segment(parsed)
             return
+        if parsed.path == "/api/admin/overview":
+            self._handle_admin_overview()
+            return
+        if parsed.path == "/api/admin/annotators":
+            self._handle_admin_annotators()
+            return
+        if parsed.path == "/api/admin/segments":
+            self._handle_admin_segments()
+            return
+        if parsed.path == "/api/admin/segment_detail":
+            self._handle_admin_segment_detail(parsed)
+            return
         if parsed.path == "/api/my_annotations":
             self._handle_my_annotations(parsed)
             return
@@ -881,6 +893,15 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/frame_jpeg":
             self._handle_frame_jpeg(parsed)
+            return
+        if parsed.path in {"/admin", "/admin/"}:
+            self._serve_admin_static("index.html", "text/html; charset=utf-8")
+            return
+        if parsed.path == "/admin/styles.css":
+            self._serve_admin_static("styles.css", "text/css; charset=utf-8")
+            return
+        if parsed.path == "/admin/app.js":
+            self._serve_admin_static("app.js", "application/javascript; charset=utf-8")
             return
         self._serve_static(parsed.path)
 
@@ -972,6 +993,36 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
+    def _handle_admin_overview(self) -> None:
+        try:
+            data = self.server.admin_state.overview()
+            self._send_json({"ok": True, "overview": data})
+        except Exception as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _handle_admin_annotators(self) -> None:
+        try:
+            data = self.server.admin_state.annotator_stats()
+            self._send_json({"ok": True, **data})
+        except Exception as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _handle_admin_segments(self) -> None:
+        try:
+            rows = self.server.admin_state.segments()
+            self._send_json({"ok": True, "segments": rows})
+        except Exception as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _handle_admin_segment_detail(self, parsed) -> None:
+        query = parse_qs(parsed.query)
+        segment_id = str(query.get("segment_id", [""])[0]).strip()
+        try:
+            detail = self.server.admin_state.segment_detail(segment_id)
+            self._send_json({"ok": True, "detail": detail})
+        except Exception as exc:
+            self._send_json({"ok": False, "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
     def _serve_static(self, request_path: str) -> None:
         relative = request_path.lstrip("/") or "index.html"
         path = (self.server.static_dir / relative).resolve()
@@ -990,6 +1041,19 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _serve_admin_static(self, filename: str, content_type: str) -> None:
+        path = self.server.admin_static_dir / filename
+        if not path.exists():
+            self._send_json({"ok": False, "error": f"missing admin static: {filename}"}, status=HTTPStatus.NOT_FOUND)
+            return
+        data = path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _send_json(self, payload: Dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -1000,9 +1064,11 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
 
 
 class HumanStage1HTTPServer(ThreadingHTTPServer):
-    def __init__(self, server_address: Tuple[str, int], state: HumanStage1State) -> None:
+    def __init__(self, server_address: Tuple[str, int], state: HumanStage1State, admin_state) -> None:
         self.state = state
         self.static_dir = state.static_dir
+        self.admin_state = admin_state
+        self.admin_static_dir = admin_state.static_dir
         super().__init__(server_address, HumanStage1RequestHandler)
 
 
@@ -1023,6 +1089,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    from application.step3_human_stage_1.ui_human_stage_1_admin_server import HumanStage1AdminState
+
     state = HumanStage1State(
         batch_dir=args.batch_dir,
         static_dir=args.static_dir,
@@ -1030,7 +1098,12 @@ def main() -> None:
         reset_storage=args.reset_storage,
     )
     state.initialize()
-    server = HumanStage1HTTPServer((args.host, args.port), state)
+    admin_state = HumanStage1AdminState(
+        batch_dir=args.batch_dir,
+        static_dir=Path("codes/application/step3_human_stage_1/admin_web"),
+    )
+    admin_state.initialize()
+    server = HumanStage1HTTPServer((args.host, args.port), state, admin_state)
     try:
         print(
             json.dumps(

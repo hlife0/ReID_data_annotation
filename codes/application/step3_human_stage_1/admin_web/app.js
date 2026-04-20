@@ -164,18 +164,18 @@ function renderSegmentDetail(detail) {
 }
 
 async function loadOverview() {
-  const payload = await fetchJson("/api/overview");
+  const payload = await fetchJson("/api/admin/overview");
   renderOverview(payload.overview);
 }
 
 async function loadAnnotators() {
-  const payload = await fetchJson("/api/annotators");
+  const payload = await fetchJson("/api/admin/annotators");
   renderAnnotatorTable(payload.annotators || []);
   renderRecentTable(payload.recent_annotations || []);
 }
 
 async function loadSegments() {
-  const payload = await fetchJson("/api/segments");
+  const payload = await fetchJson("/api/admin/segments");
   renderSegments(payload.segments || []);
 }
 
@@ -185,7 +185,7 @@ async function querySegmentDetail() {
     showToast("请先选择 segment", true);
     return;
   }
-  const payload = await fetchJson(`/api/segment_detail?segment_id=${encodeURIComponent(segmentId)}`);
+  const payload = await fetchJson(`/api/admin/segment_detail?segment_id=${encodeURIComponent(segmentId)}`);
   renderSegmentDetail(payload.detail);
 }
 

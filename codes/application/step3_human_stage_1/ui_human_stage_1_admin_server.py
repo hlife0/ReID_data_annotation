@@ -356,20 +356,20 @@ class HumanStage1AdminHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        if path == "/api/overview":
+        if path in {"/api/overview", "/api/admin/overview"}:
             return self._handle_overview()
-        if path == "/api/annotators":
+        if path in {"/api/annotators", "/api/admin/annotators"}:
             return self._handle_annotators()
-        if path == "/api/segments":
+        if path in {"/api/segments", "/api/admin/segments"}:
             return self._handle_segments()
-        if path == "/api/segment_detail":
+        if path in {"/api/segment_detail", "/api/admin/segment_detail"}:
             return self._handle_segment_detail(parsed.query)
 
-        if path == "/":
+        if path in {"/", "/admin", "/admin/"}:
             return self._serve_static("index.html", "text/html; charset=utf-8")
-        if path == "/styles.css":
+        if path in {"/styles.css", "/admin/styles.css"}:
             return self._serve_static("styles.css", "text/css; charset=utf-8")
-        if path == "/app.js":
+        if path in {"/app.js", "/admin/app.js"}:
             return self._serve_static("app.js", "application/javascript; charset=utf-8")
 
         self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
