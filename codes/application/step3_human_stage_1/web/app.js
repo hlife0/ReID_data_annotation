@@ -15,7 +15,9 @@ const HISTORY_COLLAPSED_KEY = "human_stage_1_history_collapsed";
 
 const refs = {
   annotatorId: document.getElementById("annotatorId"),
-  nextBtn: document.getElementById("nextBtn"),
+  annotatorProgress: document.getElementById("annotatorProgress"),
+  annotatorProgressBar: document.getElementById("annotatorProgressBar"),
+  annotatorProgressText: document.getElementById("annotatorProgressText"),
   submitBtn: document.getElementById("submitBtn"),
   videoStem: document.getElementById("videoStem"),
   segmentId: document.getElementById("segmentId"),
@@ -45,6 +47,7 @@ const state = {
   task: null,
   slotNames: SLOT_NAMES.slice(),
   slotDisplayNames: { ...DEFAULT_SLOT_DISPLAY_NAMES },
+  annotatorProgress: { completed_frames: 0, target_frames: 2600, ratio: 0 },
   slotDecisions: new Map(),
   activeSlot: "p1",
   history: [],
@@ -124,6 +127,7 @@ function setTaskFromPayload(payload, { rememberAssignment = true } = {}) {
   state.task = payload;
   state.slotNames = payload.slot_names || SLOT_NAMES.slice();
   state.slotDisplayNames = { ...DEFAULT_SLOT_DISPLAY_NAMES, ...(payload.slot_display_names || {}) };
+  state.annotatorProgress = payload.annotator_progress || { completed_frames: 0, target_frames: 2600, ratio: 0 };
   if (!state.slotNames.includes(state.activeSlot)) {
     state.activeSlot = state.slotNames[0] || "p1";
   }
@@ -155,8 +159,17 @@ function renderTask() {
   refs.frameImage.onload = () => renderAiOverlay();
   refs.frameImage.src = state.task.frame.image_url;
   renderAiLegend();
+  renderAnnotatorProgress();
   renderSlotTabs();
   syncActiveSlotUI();
+}
+
+function renderAnnotatorProgress(progress = state.annotatorProgress) {
+  const completed = Number(progress?.completed_frames || 0);
+  const target = Number(progress?.target_frames || 2600);
+  const ratio = Math.max(0, Math.min(1, Number(progress?.ratio || 0)));
+  refs.annotatorProgressBar.style.width = `${ratio * 100}%`;
+  refs.annotatorProgressText.textContent = `${completed} / ${target} 帧`;
 }
 
 function renderAiLegend() {
@@ -402,6 +415,8 @@ async function loadHistory({ silent = false } = {}) {
   try {
     const payload = await fetchJson(`/api/my_annotations?annotator_id=${encodeURIComponent(annotatorId())}`);
     state.history = payload.annotations || [];
+    state.annotatorProgress = payload.annotator_progress || state.annotatorProgress;
+    renderAnnotatorProgress();
     renderHistory();
     if (!silent) showToast("已刷新历史记录");
   } catch (error) {
@@ -499,8 +514,6 @@ function initEvents() {
   refs.annotatorId.addEventListener("change", () => {
     localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
     loadHistory({ silent: true });
-  });
-  refs.nextBtn.addEventListener("click", () => {
     loadNextSegment().catch((error) => showToast(error.message, true));
   });
   refs.submitBtn.addEventListener("click", () => {
