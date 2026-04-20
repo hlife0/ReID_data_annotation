@@ -69,11 +69,15 @@ PYTHONPATH=codes .venv/bin/python \
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python \
-  codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py \
+  codes/application/step3_human_stage_1/ui_human_stage_1_server.py \
   --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
-  --port 10087
+  --port 10086
 ```
+
+访问：
+
+- `http://127.0.0.1:10086/admin`
 
 ---
 
