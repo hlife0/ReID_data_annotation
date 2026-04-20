@@ -606,11 +606,13 @@ class HumanStage1ServerTests(unittest.TestCase):
             ],
         )
 
-        history = state.list_annotations_for_annotator("annotator_stage1")
+        history_payload = state.list_annotations_for_annotator("annotator_stage1")
+        history = history_payload["annotations"]
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["annotation_id"], result["annotation_id"])
         self.assertIn("P1(赵宇轩):ai_match(11|recommended_confirmed)", history[0]["slots_summary"])
         self.assertIn("P2(张络屹):absent", history[0]["slots_summary"])
+        self.assertEqual(history_payload["annotator_progress"]["completed_frames"], 3)
 
         detail = state.annotation_detail("annotator_stage1", result["annotation_id"])
         self.assertEqual(detail["annotation"]["annotation_id"], result["annotation_id"])
@@ -633,7 +635,8 @@ class HumanStage1ServerTests(unittest.TestCase):
             ],
         )
 
-        history = state.list_annotations_for_annotator("annotator_stage1")
+        history_payload = state.list_annotations_for_annotator("annotator_stage1")
+        history = history_payload["annotations"]
 
         self.assertEqual(history[0]["annotation_id"], result["annotation_id"])
         self.assertIn("P1(赵宇轩):ai_match(11|recommended_confirmed)", history[0]["slots_summary"])

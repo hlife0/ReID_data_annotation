@@ -34,6 +34,7 @@ SLOT_NAMES = [slot for slot, _display_name in SLOT_CONFIG]
 SLOT_DISPLAY_NAMES = {slot: display_name for slot, display_name in SLOT_CONFIG}
 ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"]
 AI_SELECTION_SOURCES = {"recommended_confirmed", "manual_selected"}
+TARGET_ANNOTATOR_FRAMES = 2600
 
 
 def _now_iso() -> str:
@@ -165,6 +166,7 @@ class HumanStage1State:
         if segment is None:
             raise ValueError("segment not found")
         payload = self._segment_payload(segment, queue_item=queue_item)
+        payload["annotator_progress"] = self._annotator_progress(annotator_id)
         self._append_assignment_log(annotator_id, payload["segment"]["segment_id"])
         return payload
 
@@ -278,7 +280,7 @@ class HumanStage1State:
             "queue_completed": queue_completed,
         }
 
-    def list_annotations_for_annotator(self, annotator_id: str) -> List[Dict[str, Any]]:
+    def list_annotations_for_annotator(self, annotator_id: str) -> Dict[str, Any]:
         conn = self._connect()
         try:
             rows = conn.execute(
@@ -299,19 +301,22 @@ class HumanStage1State:
             ).fetchall()
         finally:
             conn.close()
-        return [
-            {
-                "annotation_id": str(row["annotation_id"]),
-                "segment_id": str(row["segment_id"]),
-                "segment_type": str(row["segment_type"]),
-                "video_stem": str(row["video_stem"]),
-                "frame_index": int(row["frame_index"]),
-                "submitted_at": str(row["submitted_at"]),
-                "slot_decisions_json": str(row["slot_decisions_json"]),
-                "slots_summary": slot_summary_from_json(str(row["slot_decisions_json"])),
-            }
-            for row in rows
-        ]
+        return {
+            "annotations": [
+                {
+                    "annotation_id": str(row["annotation_id"]),
+                    "segment_id": str(row["segment_id"]),
+                    "segment_type": str(row["segment_type"]),
+                    "video_stem": str(row["video_stem"]),
+                    "frame_index": int(row["frame_index"]),
+                    "submitted_at": str(row["submitted_at"]),
+                    "slot_decisions_json": str(row["slot_decisions_json"]),
+                    "slots_summary": slot_summary_from_json(str(row["slot_decisions_json"])),
+                }
+                for row in rows
+            ],
+            "annotator_progress": self._annotator_progress(annotator_id),
+        }
 
     def annotation_detail(self, annotator_id: str, annotation_id: str) -> Dict[str, Any]:
         conn = self._connect()
@@ -342,6 +347,7 @@ class HumanStage1State:
             "submitted_at": str(row["submitted_at"]),
             "slot_decisions": json.loads(str(row["slot_decisions_json"])),
         }
+        payload["annotator_progress"] = self._annotator_progress(annotator_id)
         return payload
 
     def update_annotation(self, annotator_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -520,6 +526,33 @@ class HumanStage1State:
         finally:
             conn.close()
         return self._queue_record_from_row(row)
+
+    def _annotator_progress(self, annotator_id: str) -> Dict[str, Any]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT segment_id
+                FROM coarse_labels
+                WHERE annotator_id=?
+                """,
+                (annotator_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        completed_frames = 0
+        for row in rows:
+            segment = self.segment_lookup.get(str(row["segment_id"]))
+            if segment is None:
+                continue
+            completed_frames += int(segment.frame_count)
+
+        return {
+            "completed_frames": completed_frames,
+            "target_frames": TARGET_ANNOTATOR_FRAMES,
+            "ratio": completed_frames / TARGET_ANNOTATOR_FRAMES if TARGET_ANNOTATOR_FRAMES > 0 else 0.0,
+        }
 
     def _queue_item_by_id(self, queue_id: int) -> QueueRecord | None:
         conn = self._connect()
