@@ -20,7 +20,18 @@ from process.shared import segment_prep_common as common
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SLOT_NAMES = [f"p{i}" for i in range(1, 8)]
+SLOT_CONFIG = [
+    ("p1", "P1(赵宇轩)"),
+    ("p2", "P2(张络屹)"),
+    ("p3", "P3(Alison)"),
+    ("p4", "P4(刘浩贤)"),
+    ("p5", "P5(何炳毅)"),
+    ("p6", "P6(李泓睿)"),
+    ("p7", "P7(梁芳舟)"),
+    ("p8", "P8(谢灵韵)"),
+]
+SLOT_NAMES = [slot for slot, _display_name in SLOT_CONFIG]
+SLOT_DISPLAY_NAMES = {slot: display_name for slot, display_name in SLOT_CONFIG}
 ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"]
 AI_SELECTION_SOURCES = {"recommended_confirmed", "manual_selected"}
 
@@ -31,6 +42,11 @@ def _now_iso() -> str:
 
 def resolve_repo_path(path: Path) -> Path:
     return path if path.is_absolute() else (REPO_ROOT / path).resolve()
+
+
+def slot_display_name(slot: str) -> str:
+    normalized = str(slot).strip().lower()
+    return SLOT_DISPLAY_NAMES.get(normalized, normalized.upper())
 
 
 def slot_summary_from_json(slot_decisions_json: str) -> str:
@@ -44,13 +60,13 @@ def slot_summary_from_json(slot_decisions_json: str) -> str:
     for item in decisions:
         if not isinstance(item, dict):
             continue
-        slot = str(item.get("slot", "")).strip().upper()
+        slot = str(item.get("slot", "")).strip().lower()
         decision_type = str(item.get("decision_type", "")).strip()
         ai_track_id = str(item.get("ai_track_id", "") or "").strip()
         selection_source = str(item.get("selection_source", "") or "").strip()
         if not slot or not decision_type:
             continue
-        piece = f"{slot}:{decision_type}"
+        piece = f"{slot_display_name(slot)}:{decision_type}"
         if ai_track_id:
             piece += f"({ai_track_id}"
             if selection_source:
@@ -360,6 +376,7 @@ class HumanStage1State:
                 ),
             },
             "slot_names": SLOT_NAMES,
+            "slot_display_names": SLOT_DISPLAY_NAMES,
             "allowed_decisions": ALLOWED_DECISIONS,
             "manual_draw_enabled": False,
         }
