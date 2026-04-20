@@ -253,7 +253,20 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertEqual(repair_payload["frame"]["frame_index"], 5)
         self.assertEqual(stable_payload["allowed_decisions"], ["ai_match", "absent", "needs_manual"])
         self.assertEqual(repair_payload["allowed_decisions"], ["ai_match", "absent", "needs_manual"])
-        self.assertEqual(stable_payload["slot_names"], [f"p{i}" for i in range(1, 8)])
+        self.assertEqual(stable_payload["slot_names"], [f"p{i}" for i in range(1, 9)])
+        self.assertEqual(
+            stable_payload["slot_display_names"],
+            {
+                "p1": "P1(赵宇轩)",
+                "p2": "P2(张络屹)",
+                "p3": "P3(Alison)",
+                "p4": "P4(刘浩贤)",
+                "p5": "P5(何炳毅)",
+                "p6": "P6(李泓睿)",
+                "p7": "P7(梁芳舟)",
+                "p8": "P8(谢灵韵)",
+            },
+        )
         self.assertFalse(stable_payload.get("manual_draw_enabled", False))
         self.assertFalse(repair_payload.get("manual_draw_enabled", False))
 
@@ -382,6 +395,33 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertEqual(detail["annotation"]["annotation_id"], result["annotation_id"])
         self.assertEqual(detail["frame"]["frame_index"], 2)
         self.assertEqual(detail["annotation"]["slot_decisions"][0]["slot"], "p1")
+
+    def test_human_stage_1_server_uses_named_slot_labels_in_history_summary(self) -> None:
+        state = self._make_state()
+        result = state.submit_segment(
+            "annotator_stage1",
+            "sample_stage1_seg_000001",
+            {
+                "segment_id": "sample_stage1_seg_000001",
+                "video_stem": "sample",
+                "frame_index": 2,
+                "slot_decisions": [
+                    {
+                        "slot": "p1",
+                        "decision_type": "ai_match",
+                        "ai_track_id": "11",
+                        "selection_source": "recommended_confirmed",
+                    },
+                    {"slot": "p8", "decision_type": "absent", "ai_track_id": ""},
+                ],
+            },
+        )
+
+        history = state.list_annotations_for_annotator("annotator_stage1")
+
+        self.assertEqual(history[0]["annotation_id"], result["annotation_id"])
+        self.assertIn("P1(赵宇轩):ai_match(11|recommended_confirmed)", history[0]["slots_summary"])
+        self.assertIn("P8(谢灵韵):absent", history[0]["slots_summary"])
 
     def test_human_stage_1_server_updates_existing_annotation(self) -> None:
         state = self._make_state()
