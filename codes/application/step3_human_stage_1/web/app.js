@@ -19,6 +19,7 @@ const refs = {
   annotatorProgress: document.getElementById("annotatorProgress"),
   annotatorProgressBar: document.getElementById("annotatorProgressBar"),
   annotatorProgressText: document.getElementById("annotatorProgressText"),
+  fastSubmitBtn: document.getElementById("fastSubmitBtn"),
   submitBtn: document.getElementById("submitBtn"),
   videoStem: document.getElementById("videoStem"),
   segmentId: document.getElementById("segmentId"),
@@ -61,6 +62,7 @@ const state = {
   editingAnnotationId: "",
   lastAssignedTask: null,
   initialTaskRequested: false,
+  isFastMode: location.pathname === "/fast",
 };
 
 function annotatorId() {
@@ -437,6 +439,11 @@ async function submitCurrent() {
   await loadNextSegment();
 }
 
+async function submitMissingAndSubmit() {
+  markRemainingSlotsAbsent();
+  await submitCurrent();
+}
+
 function renderHistory() {
   refs.historyList.innerHTML = "";
   if (!state.history.length) {
@@ -565,6 +572,10 @@ function initEvents() {
     localStorage.setItem(ANNOTATOR_STORAGE_KEY, annotatorId());
     loadHistory({ silent: true });
     loadNextSegment().catch((error) => showToast(error.message, true));
+  });
+  refs.fastSubmitBtn.hidden = !state.isFastMode;
+  refs.fastSubmitBtn.addEventListener("click", () => {
+    submitMissingAndSubmit().catch((error) => showToast(error.message, true));
   });
   refs.submitBtn.addEventListener("click", () => {
     submitCurrent().catch((error) => showToast(error.message, true));

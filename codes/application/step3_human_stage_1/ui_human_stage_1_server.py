@@ -897,11 +897,20 @@ class HumanStage1RequestHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/admin", "/admin/"}:
             self._serve_admin_static("index.html", "text/html; charset=utf-8")
             return
+        if parsed.path in {"/fast", "/fast/"}:
+            self._serve_static("/index.html")
+            return
         if parsed.path == "/admin/styles.css":
             self._serve_admin_static("styles.css", "text/css; charset=utf-8")
             return
         if parsed.path == "/admin/app.js":
             self._serve_admin_static("app.js", "application/javascript; charset=utf-8")
+            return
+        if parsed.path == "/fast/styles.css":
+            self._serve_static("/styles.css")
+            return
+        if parsed.path == "/fast/app.js":
+            self._serve_static("/app.js")
             return
         self._serve_static(parsed.path)
 
