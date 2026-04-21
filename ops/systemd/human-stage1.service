@@ -1,0 +1,14 @@
+[Unit]
+Description=Human Stage 1 Web Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hrli/data_annotation
+Environment=PYTHONPATH=codes
+ExecStart=/home/hrli/data_annotation/.venv/bin/python /home/hrli/data_annotation/codes/application/step3_human_stage_1/ui_human_stage_1_server.py --batch-dir /home/hrli/data_annotation/annotation/batch_20260420_v01 --host 0.0.0.0 --port 10086
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
