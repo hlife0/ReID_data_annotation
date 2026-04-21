@@ -15,6 +15,8 @@
 
 - `Step 0 -> Step 3`
 
+其中 `Step 3` 的 `human_stage_1` 当前已经作为最终完成版定稿。
+
 ---
 
 ## Step 0：原始输入整理
@@ -85,6 +87,14 @@
 
 - [ui_human_stage_1_server.py](/home/hrli/data_annotation/codes/application/step3_human_stage_1/ui_human_stage_1_server.py)
 
+当前完成版包含：
+
+- 标准页面 `/`
+- 快捷页面 `/fast`
+- 专属后台 `/admin`
+- 全局共享双轮队列
+- annotator 进度与强提示交互
+
 ---
 
 ## Step 4：第二阶段任务池生成
@@ -141,4 +151,4 @@
 
 如果只记一句话：
 
-> active 仓库当前真正负责的是，从标准化输入开始，到第一阶段 `human_stage_1` 粗标跑通为止；`Step 4` 是缺口，`Step 5` 是后续阶段资源。
+> active 仓库当前真正负责的是，从标准化输入开始，到第一阶段 `human_stage_1` 最终完成版跑通为止；`Step 4` 是缺口，`Step 5` 是后续阶段资源。

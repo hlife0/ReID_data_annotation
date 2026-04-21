@@ -44,11 +44,17 @@
 4. `Step 3` 已稳定：
    - `codes/application/step3_human_stage_1/ui_human_stage_1_server.py`
    - `codes/application/step3_human_stage_1/web/`
-5. `Step 3` 当前已落地的交互包括：
+5. `Step 3` 当前作为 `human_stage_1` 最终完成版已经定稿，已落地的交互包括：
    - first-pass 之后的 second-pass `repair_window` 合并
    - 单帧 coarse decision：`ai_match / absent / needs_manual`
+   - 全局共享双轮队列
+   - 8 人命名槽位
    - 同视频历史多数票推荐与自动预选
    - 批量“其余设为不存在”
+   - `/fast` 快捷提交页
+   - annotator 个人进度条
+   - annotator 强提示弹窗
+   - `/admin` 专属后台监控
    - 左侧可折叠历史栏与已提交记录修改
 6. `Step 4` 目录已显式保留，但当前生产实现仍未独立落地
 7. `Step 5` 资源已整理到：
@@ -107,7 +113,7 @@
 1. [ANNOTATOR_INTRO.md](/home/hrli/data_annotation/docs/ANNOTATOR_INTRO.md)
 2. [ACTIVE_SERVICES.md](/home/hrli/data_annotation/docs/ACTIVE_SERVICES.md)
 
-如果你只关心 `human_stage_1` 当前优化方向：
+如果你只关心 `human_stage_1` 最终完成版：
 
 1. [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 2. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
@@ -182,7 +188,9 @@ PYTHONPATH=codes .venv/bin/python codes/application/step3_human_stage_1/ui_human
 
 访问：
 
-- `http://127.0.0.1:10086`
+- `http://127.0.0.1:10086/`
+- `http://127.0.0.1:10086/fast`
+- `http://127.0.0.1:10086/admin`
 
 ### 3. 启动 review 服务（当前归入 `Step 5` 资源）
 
@@ -200,7 +208,7 @@ PYTHONPATH=codes .venv/bin/python codes/application/step5_stage2_review/ui_revie
 
 - `http://127.0.0.1:10088`
 
-### 4. 启动 admin 服务
+### 4. 启动旧 support admin 服务
 
 ```bash
 cd /home/hrli/data_annotation
@@ -213,6 +221,11 @@ PYTHONPATH=codes .venv/bin/python codes/application/support/ui_admin_server.py \
 访问：
 
 - `http://127.0.0.1:10087`
+
+说明：
+
+- 这个入口不是 `human_stage_1` 最终完成版的主后台入口
+- `human_stage_1` 当前应优先使用 `http://127.0.0.1:10086/admin`
 
 ### 5. 跑当前核心测试
 
@@ -267,6 +280,8 @@ node --check codes/application/support/admin_web/app.js
 
 `human_stage_1` 不是最终 bbox 标注界面，而是第一轮粗标分流界面。
 
+当前仓库里的这套 `human_stage_1` 已作为最终完成版定稿。
+
 它当前的心智模型是：
 
 - 上面一排 `P1(赵宇轩)` 到 `P8(谢灵韵)` 槽位按钮
@@ -282,29 +297,34 @@ node --check codes/application/support/admin_web/app.js
 
 1. 同视频历史多数票推荐，并在当前帧自动预选
 2. “其余设为不存在”按钮，只批量填 `absent`，不自动提交
-3. 左侧可折叠历史栏，可查看并修改自己已提交的 coarse decision
-4. AI 框三种视觉状态：
+3. `/fast` 页面额外提供“其余设为不存在并提交”按钮
+4. annotator 顶部个人进度条，按已提交帧数累计到 `2600`
+5. annotator 强提示弹窗，首次进入默认会先提醒填写标注员ID
+6. 左侧可折叠历史栏，可查看并修改自己已提交的 coarse decision
+7. AI 框三种视觉状态：
    - 当前选中的已匹配框：橙色高亮
    - 已匹配但当前没选中的框：实线
    - 只有 track、尚未匹配到 pid 的框：深色虚线
-5. 专属后台监控服务：
+8. 专属后台监控服务：
    - `codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py`
    - 当前推荐通过 `http://127.0.0.1:10086/admin` 访问
    - 用于查看 stage1 队列进度、annotator 工作量、最近提交和 segment 明细
 
 对外部部署来说，本地常见访问地址是：
 
-- 本地：`http://127.0.0.1:10086`
+- 标准页面：`http://127.0.0.1:10086/`
+- 快捷页面：`http://127.0.0.1:10086/fast`
+- 专属后台：`http://127.0.0.1:10086/admin`
 
 如果需要外部转发，请以当前部署时的 ngrok 或反向代理配置为准，不要默认依赖旧的固定 URL。
 
 ---
 
-## 现阶段最重要的现实限制
+## 当前范围边界
 
-当前系统已经可用，但还不是终态。最值得知道的限制有：
+`human_stage_1` 本身已经作为最终完成版定稿，但整个仓库仍有以下范围边界：
 
-1. 段模式已建立，但主服务仍处于持续收口期
+1. `human_stage_1` 已完成，不再作为“持续收口期”功能描述
 2. 稳定段定义当前只吸收了 `low_score + overlap + track-set constancy`
 3. `bbox_jump` 等旧风险信号还没有进入新的数学定义主线
 4. 文档主线已切到段模式，但 archive 中仍保留旧阶段上下文

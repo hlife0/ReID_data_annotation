@@ -27,6 +27,11 @@
 - 读取 `human_stage_1_prep/`
 - 派发第一阶段粗标任务
 - 保存 coarse labels
+- 提供 `human_stage_1` 最终完成版 UI
+- 同端口提供：
+  - 标准页面 `/`
+  - 快捷页面 `/fast`
+  - 专属后台 `/admin`
 
 当前常用命令：
 
@@ -38,6 +43,12 @@ PYTHONPATH=codes .venv/bin/python \
   --host 127.0.0.1 \
   --port 10086
 ```
+
+访问：
+
+- 标准页面：`http://127.0.0.1:10086/`
+- 快捷页面：`http://127.0.0.1:10086/fast`
+- 专属后台：`http://127.0.0.1:10086/admin`
 
 ---
 
@@ -64,20 +75,20 @@ PYTHONPATH=codes .venv/bin/python \
 - 查看最近提交记录
 - 查询指定 `segment_id` 的队列与提交明细
 
-当前常用命令：
+当前最终推荐入口：
+
+- `http://127.0.0.1:10086/admin`
+
+兼容启动方式：
 
 ```bash
 cd /home/hrli/data_annotation
 PYTHONPATH=codes .venv/bin/python \
-  codes/application/step3_human_stage_1/ui_human_stage_1_server.py \
+  codes/application/step3_human_stage_1/ui_human_stage_1_admin_server.py \
   --batch-dir ./annotation/batch_<YYYYMMDD>_vNN \
   --host 127.0.0.1 \
-  --port 10086
+  --port 10087
 ```
-
-访问：
-
-- `http://127.0.0.1:10086/admin`
 
 ---
 
@@ -136,6 +147,11 @@ PYTHONPATH=codes .venv/bin/python \
 - 查看 batch 全局统计
 - 查看段统计
 - 查看 annotator 活跃度与提交结果
+
+说明：
+
+- 这是旧的通用 support / review admin 入口
+- 对 `human_stage_1` 最终完成版，请优先使用 `http://127.0.0.1:10086/admin`
 
 当前常用命令：
 

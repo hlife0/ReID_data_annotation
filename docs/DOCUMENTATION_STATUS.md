@@ -43,7 +43,7 @@
 1. 当前活跃代码在 `codes/`
 2. 当前第一轮人工主线是 `human_stage_1`
 3. `human_stage_1` 的核心目标是把 AI 逐帧框压缩成更少的人工工作单元
-4. 当前 active 主线按 `Step 0` 到 `Step 5` 组织，但真正已经跑通的重点是 `Step 0 -> Step 3`
+4. 当前 active 主线按 `Step 0` 到 `Step 5` 组织，但真正已经跑通并定稿的重点是 `Step 0 -> Step 3`
 5. `Step 4` 当前是显式保留的主线缺口
 6. `Step 5` 资源仍在 active 仓库中，但按主线口径属于后续阶段
 7. 活跃仓库已不再支持旧的一次性标注
@@ -71,6 +71,10 @@
 1. [README.md](/home/hrli/data_annotation/docs/README.md)
 2. [BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md](/home/hrli/data_annotation/docs/BATCH_20260417_V01_HUMAN_STAGE_1_SEGMENTATION_OPTIMIZATION_REPORT.md)
 3. [codes/process/README.md](/home/hrli/data_annotation/codes/process/README.md)
+
+补充说明：
+
+- 当前应以 `README.md` 与 `ACTIVE_SERVICES.md` 中记录的 `human_stage_1` 最终完成版交互和入口为准
 
 ### 如果你要找已下线的一次性标注资源
 

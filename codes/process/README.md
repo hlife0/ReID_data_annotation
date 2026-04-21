@@ -14,7 +14,7 @@
 
 其中：
 
-- `Step 0 -> Step 3` 是当前真正已经跑通的主线
+- `Step 0 -> Step 3` 是当前真正已经跑通并定稿的主线
 - `Step 4` 是显式保留的主线缺口
 - `Step 5` 是第二阶段资源与基础设施所在位置，但按主线口径应视为后续阶段
 
@@ -122,9 +122,9 @@ step0_preprocess/process_prepare_capture_batch.py   (可选)
 -> application/step3_human_stage_1/ui_human_stage_1_server.py
 ```
 
-## 当前优化重点
+## 当前稳定主线
 
-当前仓库仍保留 Step 5 资源与 admin 栈，但当前真正持续推进的主线已经转到：
+当前仓库仍保留 Step 5 资源与旧 admin 栈，但当前真正稳定落地并作为最终完成版使用的主线是：
 
 ```text
 step1_prelabel/process_prelabel_batch.py
