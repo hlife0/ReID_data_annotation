@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
 from application.step3_human_stage_1.ui_human_stage_1_server import (
-    TARGET_ANNOTATOR_FRAMES,
+    TARGET_ANNOTATOR_SUBMISSIONS,
     slot_summary_from_json,
 )
 
@@ -120,24 +120,16 @@ class HumanStage1AdminState:
                 LIMIT 1
                 """
             ).fetchone()
-            annotator_rows = conn.execute(
+            annotator_submission_rows = conn.execute(
                 """
-                SELECT annotator_id, segment_id
+                SELECT annotator_id, COUNT(*) AS completed_submissions
                 FROM coarse_labels
-                ORDER BY submitted_at ASC, annotation_id ASC
+                GROUP BY annotator_id
                 """
             ).fetchall()
             annotation_counts = self._annotation_counts(conn)
         finally:
             conn.close()
-
-        annotator_frame_counts: Dict[str, int] = {}
-        for row in annotator_rows:
-            annotator_id = str(row["annotator_id"])
-            segment = self.segment_lookup.get(str(row["segment_id"]))
-            if segment is None:
-                continue
-            annotator_frame_counts[annotator_id] = annotator_frame_counts.get(annotator_id, 0) + segment.frame_count
 
         segment_annotation_bins = {"0": 0, "1": 0, "2": 0, "3+": 0}
         for segment in self.segment_order:
@@ -174,10 +166,11 @@ class HumanStage1AdminState:
                 {"label": "2", "count": segment_annotation_bins["2"]},
                 {"label": "3+", "count": segment_annotation_bins["3+"]},
             ],
-            "annotator_frame_counts": [
-                {"annotator_id": annotator_id, "completed_frames": completed_frames}
-                for annotator_id, completed_frames in sorted(
-                    annotator_frame_counts.items(), key=lambda item: (-item[1], item[0])
+            "annotator_submission_counts": [
+                {"annotator_id": str(row["annotator_id"]), "completed_submissions": int(row["completed_submissions"])}
+                for row in sorted(
+                    annotator_submission_rows,
+                    key=lambda item: (-int(item["completed_submissions"]), str(item["annotator_id"])),
                 )
             ],
         }
@@ -187,7 +180,7 @@ class HumanStage1AdminState:
         try:
             annotation_rows = conn.execute(
                 """
-                SELECT annotator_id, segment_id, submitted_at
+                SELECT annotator_id, submitted_at
                 FROM coarse_labels
                 ORDER BY submitted_at ASC, annotation_id ASC
                 """
@@ -216,31 +209,31 @@ class HumanStage1AdminState:
         merged: Dict[str, Dict[str, Any]] = {}
         for row in annotation_rows:
             annotator_id = str(row["annotator_id"])
-            segment = self.segment_lookup.get(str(row["segment_id"]))
-            frame_count = int(segment.frame_count) if segment is not None else 0
             entry = merged.setdefault(
                 annotator_id,
                 {
                     "annotator_id": annotator_id,
                     "annotation_count": 0,
-                    "completed_frames": 0,
-                    "target_frames": TARGET_ANNOTATOR_FRAMES,
+                    "completed_submissions": 0,
+                    "target_submissions": TARGET_ANNOTATOR_SUBMISSIONS,
                     "progress_ratio": 0.0,
                     "latest_submitted_at": "",
                 },
             )
             entry["annotation_count"] += 1
-            entry["completed_frames"] += frame_count
+            entry["completed_submissions"] += 1
             entry["latest_submitted_at"] = str(row["submitted_at"])
 
         for entry in merged.values():
             entry["progress_ratio"] = (
-                entry["completed_frames"] / TARGET_ANNOTATOR_FRAMES if TARGET_ANNOTATOR_FRAMES > 0 else 0.0
+                entry["completed_submissions"] / TARGET_ANNOTATOR_SUBMISSIONS
+                if TARGET_ANNOTATOR_SUBMISSIONS > 0
+                else 0.0
             )
 
         annotators = sorted(
             merged.values(),
-            key=lambda item: (-int(item["completed_frames"]), item["annotator_id"]),
+            key=lambda item: (-int(item["completed_submissions"]), item["annotator_id"]),
         )
 
         recent_annotations = [

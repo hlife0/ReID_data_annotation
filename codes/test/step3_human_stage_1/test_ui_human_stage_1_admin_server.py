@@ -200,17 +200,17 @@ class HumanStage1AdminServerTests(unittest.TestCase):
         self.assertEqual(overview["current_queue"]["segment_id"], "seg_b_001")
         self.assertEqual(overview["segment_annotation_bins"], [{"label": "0", "count": 0}, {"label": "1", "count": 1}, {"label": "2", "count": 1}, {"label": "3+", "count": 0}])
 
-    def test_human_stage_1_admin_annotator_stats_reports_completed_frames(self) -> None:
+    def test_human_stage_1_admin_annotator_stats_reports_completed_submissions(self) -> None:
         state = self._make_state()
 
         payload = state.annotator_stats()
 
         annotators = {item["annotator_id"]: item for item in payload["annotators"]}
         self.assertEqual(annotators["annotator_a"]["annotation_count"], 2)
-        self.assertEqual(annotators["annotator_a"]["completed_frames"], 8)
-        self.assertAlmostEqual(annotators["annotator_a"]["progress_ratio"], 8 / 2600, places=6)
+        self.assertEqual(annotators["annotator_a"]["completed_submissions"], 2)
+        self.assertAlmostEqual(annotators["annotator_a"]["progress_ratio"], 2 / 2600, places=6)
         self.assertEqual(annotators["annotator_b"]["annotation_count"], 1)
-        self.assertEqual(annotators["annotator_b"]["completed_frames"], 3)
+        self.assertEqual(annotators["annotator_b"]["completed_submissions"], 1)
 
         recent = payload["recent_annotations"]
         self.assertEqual(recent[0]["annotation_id"], "ann_a_002")

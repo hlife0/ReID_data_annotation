@@ -54,7 +54,7 @@ const state = {
   task: null,
   slotNames: SLOT_NAMES.slice(),
   slotDisplayNames: { ...DEFAULT_SLOT_DISPLAY_NAMES },
-  annotatorProgress: { completed_frames: 0, target_frames: 2600, ratio: 0 },
+  annotatorProgress: { completed_submissions: 0, target_submissions: 2600, ratio: 0 },
   slotDecisions: new Map(),
   activeSlot: "p1",
   history: [],
@@ -179,7 +179,7 @@ function setTaskFromPayload(payload, { rememberAssignment = true } = {}) {
   state.task = payload;
   state.slotNames = payload.slot_names || SLOT_NAMES.slice();
   state.slotDisplayNames = { ...DEFAULT_SLOT_DISPLAY_NAMES, ...(payload.slot_display_names || {}) };
-  state.annotatorProgress = payload.annotator_progress || { completed_frames: 0, target_frames: 2600, ratio: 0 };
+  state.annotatorProgress = payload.annotator_progress || { completed_submissions: 0, target_submissions: 2600, ratio: 0 };
   if (!state.slotNames.includes(state.activeSlot)) {
     state.activeSlot = state.slotNames[0] || "p1";
   }
@@ -217,11 +217,11 @@ function renderTask() {
 }
 
 function renderAnnotatorProgress(progress = state.annotatorProgress) {
-  const completed = Number(progress?.completed_frames || 0);
-  const target = Number(progress?.target_frames || 2600);
+  const completed = Number(progress?.completed_submissions || 0);
+  const target = Number(progress?.target_submissions || 2600);
   const ratio = Math.max(0, Math.min(1, Number(progress?.ratio || 0)));
   refs.annotatorProgressBar.style.width = `${ratio * 100}%`;
-  refs.annotatorProgressText.textContent = `${completed} / ${target} 帧`;
+  refs.annotatorProgressText.textContent = `${completed} / ${target} 提交`;
 }
 
 function renderAiLegend() {

@@ -34,7 +34,7 @@ SLOT_NAMES = [slot for slot, _display_name in SLOT_CONFIG]
 SLOT_DISPLAY_NAMES = {slot: display_name for slot, display_name in SLOT_CONFIG}
 ALLOWED_DECISIONS = ["ai_match", "absent", "needs_manual"]
 AI_SELECTION_SOURCES = {"recommended_confirmed", "manual_selected"}
-TARGET_ANNOTATOR_FRAMES = 2600
+TARGET_ANNOTATOR_SUBMISSIONS = 2600
 
 
 def _now_iso() -> str:
@@ -530,28 +530,25 @@ class HumanStage1State:
     def _annotator_progress(self, annotator_id: str) -> Dict[str, Any]:
         conn = self._connect()
         try:
-            rows = conn.execute(
+            row = conn.execute(
                 """
-                SELECT segment_id
+                SELECT COUNT(*) AS completed_submissions
                 FROM coarse_labels
                 WHERE annotator_id=?
                 """,
                 (annotator_id,),
-            ).fetchall()
+            ).fetchone()
         finally:
             conn.close()
 
-        completed_frames = 0
-        for row in rows:
-            segment = self.segment_lookup.get(str(row["segment_id"]))
-            if segment is None:
-                continue
-            completed_frames += int(segment.frame_count)
+        completed_submissions = int(row["completed_submissions"] or 0) if row is not None else 0
 
         return {
-            "completed_frames": completed_frames,
-            "target_frames": TARGET_ANNOTATOR_FRAMES,
-            "ratio": completed_frames / TARGET_ANNOTATOR_FRAMES if TARGET_ANNOTATOR_FRAMES > 0 else 0.0,
+            "completed_submissions": completed_submissions,
+            "target_submissions": TARGET_ANNOTATOR_SUBMISSIONS,
+            "ratio": completed_submissions / TARGET_ANNOTATOR_SUBMISSIONS
+            if TARGET_ANNOTATOR_SUBMISSIONS > 0
+            else 0.0,
         }
 
     def _queue_item_by_id(self, queue_id: int) -> QueueRecord | None:

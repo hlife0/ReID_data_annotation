@@ -286,7 +286,7 @@ node --check codes/application/support/admin_web/app.js
 
 - 上面一排 `P1(赵宇轩)` 到 `P8(谢灵韵)` 槽位按钮
 - 派单使用全局共享队列：所有 segment 先完整排一遍，再完整排第二遍，只有提交成功才会推进队列
-- 顶部不再提供“下一段”按钮；annotator 右侧会显示个人进度条，按已提交帧数累计到 `2600`
+- 顶部不再提供“下一段”按钮；annotator 右侧会显示个人进度条，按已提交次数累计到 `2600`
 - 下面只编辑当前槽位
 - 每个槽位只允许：
   - `ai_match`
@@ -298,7 +298,7 @@ node --check codes/application/support/admin_web/app.js
 1. 同视频历史多数票推荐，并在当前帧自动预选
 2. “其余设为不存在”按钮，只批量填 `absent`，不自动提交
 3. `/fast` 页面额外提供“其余设为不存在并提交”按钮
-4. annotator 顶部个人进度条，按已提交帧数累计到 `2600`
+4. annotator 顶部个人进度条，按已提交次数累计到 `2600`
 5. annotator 强提示弹窗，首次进入默认会先提醒填写标注员ID
 6. 左侧可折叠历史栏，可查看并修改自己已提交的 coarse decision
 7. AI 框三种视觉状态：

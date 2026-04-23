@@ -328,7 +328,7 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertFalse(stable_payload.get("manual_draw_enabled", False))
         self.assertFalse(repair_payload.get("manual_draw_enabled", False))
 
-    def test_human_stage_1_server_reports_annotator_progress_in_frames(self) -> None:
+    def test_human_stage_1_server_reports_annotator_progress_in_submissions(self) -> None:
         state = self._make_state()
 
         self._submit_next_segment(
@@ -344,9 +344,9 @@ class HumanStage1ServerTests(unittest.TestCase):
 
         payload = state.assign_next_segment("annotator_stage1")
 
-        self.assertEqual(payload["annotator_progress"]["completed_frames"], 6)
-        self.assertEqual(payload["annotator_progress"]["target_frames"], 2600)
-        self.assertAlmostEqual(payload["annotator_progress"]["ratio"], 6 / 2600, places=6)
+        self.assertEqual(payload["annotator_progress"]["completed_submissions"], 2)
+        self.assertEqual(payload["annotator_progress"]["target_submissions"], 2600)
+        self.assertAlmostEqual(payload["annotator_progress"]["ratio"], 2 / 2600, places=6)
 
     def test_human_stage_1_server_edit_does_not_increase_progress(self) -> None:
         state = self._make_state()
@@ -356,7 +356,7 @@ class HumanStage1ServerTests(unittest.TestCase):
             [{"slot": "p1", "decision_type": "ai_match", "ai_track_id": "11"}],
         )
 
-        before = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_frames"]
+        before = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_submissions"]
 
         state.update_annotation(
             "annotator_stage1",
@@ -368,10 +368,10 @@ class HumanStage1ServerTests(unittest.TestCase):
             },
         )
 
-        after = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_frames"]
+        after = state.assign_next_segment("annotator_stage1")["annotator_progress"]["completed_submissions"]
 
-        self.assertEqual(before, 3)
-        self.assertEqual(after, 3)
+        self.assertEqual(before, 1)
+        self.assertEqual(after, 1)
 
     def test_human_stage_1_server_initializes_global_queue_with_two_passes(self) -> None:
         state = self._make_state()
@@ -612,7 +612,7 @@ class HumanStage1ServerTests(unittest.TestCase):
         self.assertEqual(history[0]["annotation_id"], result["annotation_id"])
         self.assertIn("P1(赵宇轩):ai_match(11|recommended_confirmed)", history[0]["slots_summary"])
         self.assertIn("P2(张络屹):absent", history[0]["slots_summary"])
-        self.assertEqual(history_payload["annotator_progress"]["completed_frames"], 3)
+        self.assertEqual(history_payload["annotator_progress"]["completed_submissions"], 1)
 
         detail = state.annotation_detail("annotator_stage1", result["annotation_id"])
         self.assertEqual(detail["annotation"]["annotation_id"], result["annotation_id"])

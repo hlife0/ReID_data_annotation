@@ -80,7 +80,7 @@ function renderOverview(overview) {
   refs.mAnnotatorCount.textContent = overview.annotator_count;
 
   renderBarChart(refs.segmentCountChart, overview.segment_annotation_bins || [], "label", "count");
-  renderBarChart(refs.annotatorProgressChart, overview.annotator_frame_counts || [], "annotator_id", "completed_frames");
+  renderBarChart(refs.annotatorProgressChart, overview.annotator_submission_counts || [], "annotator_id", "completed_submissions");
 }
 
 function renderAnnotatorTable(rows) {
@@ -95,8 +95,8 @@ function renderAnnotatorTable(rows) {
     tr.innerHTML = `
       <td>${row.annotator_id}</td>
       <td>${row.annotation_count}</td>
-      <td>${row.completed_frames}</td>
-      <td>${row.completed_frames} / ${row.target_frames}</td>
+      <td>${row.completed_submissions}</td>
+      <td>${row.completed_submissions} / ${row.target_submissions}</td>
       <td>${row.latest_submitted_at || "-"}</td>
     `;
     refs.annotatorBody.appendChild(tr);

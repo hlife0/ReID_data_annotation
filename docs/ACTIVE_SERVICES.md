@@ -71,7 +71,7 @@ PYTHONPATH=codes .venv/bin/python \
 作用：
 
 - 监控 `human_stage_1` 专属队列进度
-- 查看 annotator 的 stage1 已提交帧数和进度
+- 查看 annotator 的 stage1 已提交次数和进度
 - 查看最近提交记录
 - 查询指定 `segment_id` 的队列与提交明细
 
